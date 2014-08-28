@@ -37,7 +37,7 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 			 #img.data=dist.correct(img.data)
 			 
 		#Apply the dark, flatfield and distortion correction (as specified by the user)
-		img.data=DataCorr.apply_correction(img.data,HFParams.DoDarkCorr,HFParams.DoFlatCorr,HFParams.DoDistCorr)
+		img.data=DataCorr.apply_correction(img.data,HFParams.DoDarkCorr,HFParams.DoFlatCorr,HFParams.DoDist)
 			 
 		#Remove beam stop area (i.e = 0)
 		img.data[XSetup.beam_y-15:XSetup.beam_y+15,XSetup.beam_x-15:XSetup.beam_x+15]=0

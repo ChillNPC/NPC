@@ -110,12 +110,12 @@ class XSetup():
 
     wavelength=0.832
     distance=100.626
-    beam_x=521.9095
-    beam_y=516.923
+    beam_x=523.2544
+    beam_y=512.7213
     
 class HFParams():
 
-    threshold=40
+    threshold=30
     DoBkgCorr=True
     DoDarkCorr=True
     DoFlatCorr=True
@@ -123,7 +123,7 @@ class HFParams():
     npixels=20
     nbkg=1
     bkg=1
-    procs=1
+    procs=4
 
 class IO():   
     # This class instantiates all dirs and filenames
@@ -134,26 +134,26 @@ class IO():
       self.bkg=[]
       self.datadir=None
       self.procdir=None
-      self.pickle=True
+      self.pickle=False
       self.H5=True
-      self.edf=True
-      #self.bname_list = []
+      self.edf=False
+      self.bname_list = []
       self.fname_list=[]
       
     def get_all_frames(self):
         return glob.glob(self.root+"*.edf")
 	
     
-    #def get_bkg(self):
+    def get_bkg(self):
         
-	#try:self.bkg=self.bkg.split(',')
-	#except: self.bkg=self.bkg
-	#for img in self.bkg:
-	#   img=str(img)
-	#   if len(img) <= 3:
-	#       self.bname_list.append(self.root+'_%s.edf'%img.zfill(4))
-	#   else: self.bname_list.append(self.root+'_%s.edf'%img)
-	#return self.bname_list
+	try:self.bkg=self.bkg.split(',')
+	except: self.bkg=self.bkg
+	for img in self.bkg:
+	   img=str(img)
+	   if len(img) <= 3:
+	       self.bname_list.append(self.root+'_%s.edf'%img.zfill(4))
+	   else: self.bname_list.append(self.root+'_%s.edf'%img)
+	return self.bname_list
 	
 	
 class Projection():
@@ -244,9 +244,9 @@ class MProcess(multiprocessing.Process):
 	    self.signal=False
 	except: return
 
-#class Bkg():
-#   scales=[]
-#   data=[]
+class Bkg():
+   scales=[]
+   data=[]
    
 
 	
@@ -261,7 +261,7 @@ class main():
 	self.HFParams=HFParams
 	self.Frelon=Frelon()
 	self.DataCorr=Correction(1024)
-	#self.BKG=Bkg()
+	self.BKG=Bkg()
 	
 	#Chdir to the processing path
 	os.chdir(self.IO.datadir)
@@ -286,10 +286,10 @@ class main():
 	
 	self.SaveStatsStart()
 	
-	#if self.HFParams.DoBkgCorr:
-	#   self.IO.get_bkg()
+	if self.HFParams.DoBkgCorr:
+	   self.IO.get_bkg()
 	    
-	#   self.BkgCalc()
+	   self.BkgCalc()
 	   
 	self.StartMP()
 	self.FindHits()
@@ -377,7 +377,7 @@ class main():
 		bkg = ndimage.filters.median_filter(bkg.astype(np.float32), 11)
 		
 		#Apply the dark, flatfield and distortion correction (as specified by the user) 	
-		bkg = self.DataCorr.apply_correction(bkg,self.HFParams.DoDarkCorr,self.HFParams.DoFlatCorr,self.HFParams.DoDistCorr)
+		bkg = self.DataCorr.apply_correction(bkg,self.HFParams.DoDarkCorr,self.HFParams.DoFlatCorr,self.HFParams.DoDist)
 		
 		#Remove center of the frame
 		bkg[self.XSetup.beam_y-15:self.XSetup.beam_y+15,self.XSetup.beam_x-15:self.XSetup.beam_x+15]=0
@@ -779,14 +779,14 @@ if __name__ == '__main__':
 	#Frelon=Frelon()
 	#Correction=Correction(None)
 	presenter()
-	start=10710
-        for i in range(0,30):
+	start=10770
+        for i in range(0,24):
           num=start+i*10
-	  IO.datadir='/data/visitor/ls2253/id13/REMOTE_DATA/mem3/edf%i'%num#os.getcwd()
+	  IO.datadir='/Volumes/reggiani/LS2253_JULY2014/REMOTE_DATA/mem3/edf%i'%num#os.getcwd()
 	  #print IO.datadir
           #try:
 	  os.chdir(IO.datadir)
-          IO.procdir='/data/visitor/ls2253/id13/PROCESS/mem3'
+          IO.procdir='/Volumes/reggiani/LS2253_JULY2014/mem3'
 	  IO.root=os.path.join('mem3_fre_%i'%num)
        #   print IO.root
    	  IO.bkg=[0]
