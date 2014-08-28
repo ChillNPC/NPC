@@ -4,7 +4,9 @@
 #####################################################################################################
 
 #from wx.lib.pubsub import Publisher as pub 
-from wx.lib.pubsub import pub
+try:
+   from wx.lib.pubsub import pub
+except ImportError: from pubsub import pub
 from HitFinder_dev import HitFinder
 import sys, fabio, glob, numpy as np, h5py, time, math, shutil, os
 import optparse
@@ -512,21 +514,22 @@ def dograph (cleanmax,cleanhit,diff,threshold,median):
 	title3 = 'Difference map'
 
 	fig=plt.figure()
-	ax = fig.add_subplot(1, 3, 1)
-	plt.imshow(cleanmax,vmin=median, vmax=threshold, cmap='jet')
-	plt.colorbar(orientation="horizontal",fraction=0.07)
-	plt.title('%s' %title1,fontsize=12)
+	ax1 = fig.add_subplot(131)
+	ax1.imshow(cleanmax,vmin=median, vmax=threshold, cmap='jet')
+	ax1.colorbar(orientation="horizontal",fraction=0.07)
+	ax1.set_title('%s' %title1,fontsize=12)
 
-	ax = fig.add_subplot(1, 3, 2)
-	plt.imshow(cleanhit, vmin=median, vmax=threshold, cmap='jet')
-	plt.colorbar(orientation="horizontal",fraction=0.07)
-	plt.title('%s' %title2,fontsize=12)
+	ax2 = fig.add_subplot(132)
+	ax2.imshow(cleanhit, vmin=median, vmax=threshold, cmap='jet')
+	ax2.colorbar(orientation="horizontal",fraction=0.07)
+	ax2.set_title('%s' %title2,fontsize=12)
 	
-	ax = fig.add_subplot(1, 3, 3)
-	plt.imshow(diff,vmin=median, vmax=threshold, cmap='jet')
-	plt.colorbar(orientation="horizontal",fraction=0.07)
-	plt.title('%s' %title3,fontsize=12)
+	ax3 = fig.add_subplot(133)
+	ax3.imshow(diff,vmin=median, vmax=threshold, cmap='jet')
+	ax3.colorbar(orientation="horizontal",fraction=0.07)
+	ax3.set_title('%s' %title3,fontsize=12)
 	plt.show()# plot the shit...
+	
 ########################################################################################		
 
 ############### FROM WEB
@@ -773,21 +776,34 @@ if __name__ == '__main__':
         IO=IO()
 	X=XSetup()
 	HF=HFParams()
-	Frelon=Frelon()
-	Correction=Correction(None)
-	IO.datadir='/data/visitor/ls2253/id13/DATA/lys4/edf1021'#os.getcwd()
-	IO.procdir=os.getcwd()
-	IO.root=os.path.join(IO.datadir,'lys4_coll1_'+os.path.split(IO.datadir)[1][3:])
-	IO.bkg=[1,2,3]
+	#Frelon=Frelon()
+	#Correction=Correction(None)
 	presenter()
-	 #os.chdir(path2)
-	print "============================================\n" 
-	print "Now Hit Finding in %s" %IO.datadir
-	main(IO,XSetup,HFParams,Correction,Frelon,True)
-	print "Finished  Hit Finding in %s\n" %IO.datadir
-	print "============================================\n" 
-	 
-	
+	start=10710
+        for i in range(0,30):
+          num=start+i*10
+	  IO.datadir='/data/visitor/ls2253/id13/REMOTE_DATA/mem3/edf%i'%num#os.getcwd()
+	  #print IO.datadir
+          #try:
+	  os.chdir(IO.datadir)
+          IO.procdir='/data/visitor/ls2253/id13/PROCESS/mem3'
+	  IO.root=os.path.join('mem3_fre_%i'%num)
+       #   print IO.root
+   	  IO.bkg=[0]
+   	  #presenter()
+	  #os.chdir(path2)
+	  num_files=len(glob.glob('*.edf'))
+          if num_files == 1681:
+           print "============================================\n" 
+   	   print "Now Hit Finding in %s" %IO.datadir
+	   main(IO,XSetup,HFParams,True)
+	   print "Finished  Hit Finding in %s\n" %IO.datadir
+	   print "============================================\n" 
+	  else  :
+            print "Scan not finished... Waiting up"
+            time.sleep(60)
+        #  except: print "No such file or directory"
+		
 	
     
 
