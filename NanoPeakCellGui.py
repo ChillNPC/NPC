@@ -1,8 +1,10 @@
 #!/Library/Frameworks/Python.framework/Versions/Current/bin/python
 import wx, os,glob
 import imp
-#from wx.lib.pubsub import Publisher as pub
-from wx.lib.pubsub import pub
+try:
+   from wx.lib.pubsub import pub
+except: from wx.lib.pubsub import pub
+
 import numpy as np
 from matplotlib import use as mpl_use
 mpl_use('WXAgg')
@@ -14,6 +16,7 @@ from threading import Thread
 import NanoPeakCell_dev as Hit
 
 import fabio, pyFAI, pyFAI.distortion, pyFAI.detectors
+
 try : 
     imp.find_module('h5py')
     H5=True
@@ -34,17 +37,6 @@ def NPCVar():
     import os
     return os.environ['NPC']
 
-#flatfield=fabio.open("/Users/Nico/Desktop/nanopeakcell/flatfield_1024.edf").data.astype(np.float32)
-#frelon=pyFAI.detectors.FReLoN(splineFile="/Users/Nico/Desktop/nanopeakcell/distorsion_1024.spline")
-#darkpath="//Users/Nico/Desktop/nanopeakcell/"
-
-
-#flatfield=fabio.open("/mntdirect/_data_opid13_inhouse1/SRC_SERIAL/nanopeakcell/flatfield_1024.edf").data.astype(np.float32)
-#frelon=pyFAI.detectors.FReLoN(splineFile="/mntdirect/_data_opid13_inhouse1/SRC_SERIAL/nanopeakcell/distorsion_1024.spline")
-#darkpath="/mntdirect/_data_visitor/ls2253/id13/DATA/lys2/"
-
-
-	
 		        
 
 
@@ -435,7 +427,7 @@ class HitView(wx.Panel):
 	self.Bind(wx.EVT_BUTTON, self.FindHits, self.HitFinder)
         self.Bind(wx.EVT_BUTTON, self.OnStop, self.Stop)
         self.Bind(wx.EVT_BUTTON, self.GetDir, self.Browse)
-	self.Bind(wx.EVT_BUTTON, self.GetDir, self.Browse2)
+	self.Bind(wx.EVT_BUTTON, self.GetDir2, self.Browse2)
 	
         
     
@@ -492,7 +484,14 @@ class HitView(wx.Panel):
 		  os.chdir(self.path)
 		  self.Dir.SetValue(self.path)
        dlg.Destroy()
-    
+    def GetDir2(self, event):
+        dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.path)
+        if dlg.ShowModal() == wx.ID_OK:
+                   #self.path = dlg.GetPath()
+                 #os.chdir(self.path)
+                 self.PDir.SetValue(self.path)
+        dlg.Destroy()
+
     def OnCorr(self,e):
         if self.corr.GetValue() == True:
 	    self.bkg.Enable()

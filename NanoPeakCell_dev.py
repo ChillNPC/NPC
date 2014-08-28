@@ -38,14 +38,14 @@ class Correction():
 	self.root=NPCVar()
     def load_all(self):
     	try:
-	  self.ff=os.path.join(self.root,"flatfield_%i.edf"%self.resolution)
+	  self.ff=os.path.join(self.root,"FILES","flatfield_%i.edf"%self.resolution)
 	  self.flatfield=fabio.open(self.ff).data.astype(np.float32)
 	except : 
 	   return False
 	   print "Error with flatfield image"
         
 	try:
-	   self.d=os.path.join(self.root,"dark.edf")
+	   self.d=os.path.join(self.root,"FILES","dark.edf")
 	   self.dark=fabio.open(self.d).data.astype(np.float32)
 	except: 
 	  return False
@@ -53,7 +53,7 @@ class Correction():
 	  
 	
         try:
-	  self.sf=os.path.join(self.root,"distorsion_%i.spline"%self.resolution)
+	  self.sf=os.path.join(self.root,"FILES","distorsion_%i.spline"%self.resolution)
 	  frelon=pyFAI.detectors.FReLoN(splineFile=self.sf)
           self.dist=pyFAI.distortion.Distortion(frelon)
           print "Calculating Distortion Look-Up Table"
