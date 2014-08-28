@@ -895,7 +895,7 @@ class Logo(wx.SplashScreen):
 
     def __init__(self, parent = None):
         self.root=NPCVar()
-	Logo=wx.Image(name=os.path.join(self.root,'NPC.png')).ConvertToBitmap()
+	Logo=wx.Image(name=os.path.join(self.root,"FILES",'NPC.png')).ConvertToBitmap()
 	splashStyle = wx.SPLASH_CENTER_ON_SCREEN | wx.SPLASH_TIMEOUT
 	splashDuration = 1500 #milliseconds
         wx.SplashScreen.__init__(self, Logo, splashStyle, splashDuration, None)
