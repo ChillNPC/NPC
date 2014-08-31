@@ -36,6 +36,7 @@ class Correction():
     def __init__(self, resolution):
         self.resolution=resolution
 	self.root=NPCVar()
+    
     def load_all(self):
     	try:
 	  self.ff=os.path.join(self.root,"FILES","flatfield_%i.edf"%self.resolution)
@@ -76,13 +77,48 @@ class Correction():
 	
 	return tmp
 	
-		        
+class AI():
+    """ This class instanti
+    """
+    def __init__(self, XSetup,Detector):
+        self.root=NPCVar()
+	self.distance=XSetup.distance/1000.
+	self.psx=Detector.pixel_size/1000.
+	self.psy=Detector.pixel_size/1000.
+	self.bcx=XSetup.beam_x*self.psx
+	self.bcy=XSetup.beam_y*self.psy
+	self.resolution=Detector.resolution
+	#self.sf=os.path.join(self.root,"FILES","distorsion_%i.spline"%self.resolution)
+	self.spline=os.path.join(self.root,"FILES","distorsion_%i.spline"%self.resolution[0])
+	self.detector=Detector
+	self.wl=XSetup.wavelength
+	self.ai=pyFAI.AzimuthalIntegrator(dist=self.distance,
+			                  poni1=self.bcx,
+					  poni2=self.bcy,
+					  rot1=0,
+					  rot2=0,
+					  rot3=0,
+					  pixel1=self.psx,
+					  pixel2=self.psy,
+					  splineFile=self.spline,
+					  detector=self.detector.name,
+					  wavelength=self.wl)
+	#We should remove the beam stop				  
+	self.mask=np.zeros(self.resolution,dtype=bool)
+    def test(self):
+	    print "Distance (m): %s" %str(self.distance)
+	    print "Beam center X (m): %s" %str(self.bcx)
+	    print "Beam center Y (m): %s" %str(self.bcy)	
+	    print "Pixel Size  X (m): %s" %str(self.psx)
+	    print "Pixel Size  Y (m): %s" %str(self.psy)
+	 	
+	    	        
 class Detector():
     def __init__(self):
         self.name=''
 	self.pixel_size=0.1 #(mm)
 	self.overload=65535
-	self.resolution=2048
+	self.resolution=(2048.2048)
 	self.binning=1
 	
     def set_resolution(self,img):
@@ -96,6 +132,7 @@ class Frelon(Detector):
         Detector.__init__(self)
         self.name='Frelon'
         self.pixel_size=0.05131 #(mm)
+	
     
 class Pilatus6M(Detector):
     def __init__(self):
@@ -120,6 +157,7 @@ class HFParams():
     DoDarkCorr=True
     DoFlatCorr=True
     DoDist=True
+    DoPeakSearch=True
     npixels=20
     nbkg=1
     bkg=1
@@ -144,16 +182,16 @@ class IO():
         return glob.glob(self.root+"*.edf")
 	
     
-    def get_bkg(self):
+    #def get_bkg(self):
         
-	try:self.bkg=self.bkg.split(',')
-	except: self.bkg=self.bkg
-	for img in self.bkg:
-	   img=str(img)
-	   if len(img) <= 3:
-	       self.bname_list.append(self.root+'_%s.edf'%img.zfill(4))
-	   else: self.bname_list.append(self.root+'_%s.edf'%img)
-	return self.bname_list
+#	try:self.bkg=self.bkg.split(',')
+#	except: self.bkg=self.bkg
+#	for img in self.bkg:
+#	   img=str(img)
+#	   if len(img) <= 3:
+#	       self.bname_list.append(self.root+'_%s.edf'%img.zfill(4))
+#	   else: self.bname_list.append(self.root+'_%s.edf'%img)
+#	return self.bname_list
 	
 	
 class Projection():
@@ -244,9 +282,9 @@ class MProcess(multiprocessing.Process):
 	    self.signal=False
 	except: return
 
-class Bkg():
-   scales=[]
-   data=[]
+#class Bkg():
+#   scales=[]
+#   data=[]
    
 
 	
@@ -261,21 +299,26 @@ class main():
 	self.HFParams=HFParams
 	self.Frelon=Frelon()
 	self.DataCorr=Correction(1024)
-	self.BKG=Bkg()
+	#self.BKG=Bkg()
 	
-	#Chdir to the processing path
-	os.chdir(self.IO.datadir)
-	
-	self.OutPutDirs()
 	#Get all frames to process
 	self.IO.fname_list=self.IO.get_all_frames()
 	
-	    
 	#Setup resolution for detector and correction:
 	tmp=fabio.open(self.IO.fname_list[0])
 	self.Frelon.set_resolution(tmp)
 	self.DataCorr.resolution=self.Frelon.resolution[0]
 	#tmp.close()
+	
+	self.ai=AI(self.XSetup,self.Frelon)
+	#self.ai.test()
+	#Chdir to the processing path
+	os.chdir(self.IO.datadir)
+	
+	self.OutPutDirs()
+	
+	
+	    
 	if self.IO.ext == '.edf':
 	  if not self.DataCorr.load_all():
 	    print "Error with files needed for data correction. Aborted"
@@ -286,10 +329,10 @@ class main():
 	
 	self.SaveStatsStart()
 	
-	if self.HFParams.DoBkgCorr:
-	   self.IO.get_bkg()
+	#if self.HFParams.DoBkgCorr:
+	#   self.IO.get_bkg()
 	    
-	   self.BkgCalc()
+	#   self.BkgCalc()
 	   
 	self.StartMP()
 	self.FindHits()
@@ -401,28 +444,28 @@ class main():
     def FindHits(self):
     	self.total=len(self.IO.fname_list)
 	print self.total
-	print '\n= Job progression = Hit rate =    Max   =   Min   = Median  = Scale  = Bkg img'
+	print '\n= Job progression = Hit rate =    Max   =   Min   = Median = #Peaks '
 	self.hit=0
 	self.nbfile=0
 	self.peaks_all_frame=[]
 	for fname in self.IO.fname_list:
 	  if self.signal:
-		self.tasks.put(HitFinder(self.IO,self.XSetup,self.HFParams,self.Frelon,self.DataCorr,self.BKG,self.nbfile))
+		self.tasks.put(HitFinder(self.IO,self.XSetup,self.HFParams,self.Frelon,self.DataCorr,self.ai,self.nbfile))
 		self.nbfile +=1
 		    
 		while True:
 		     try:
-	             	res=self.results.get(block=True, timeout=0.1)
-			self.hit = self.hit + res[0]
-			if res[0] == 1: 
+	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
+			self.hit = self.hit + hit
+			if hit == 1: 
 			    
-			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(res[8]))[0]+".h5")
-			    pub.sendMessage('Hit',filename=OutputFileName)
+			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
+			    pub.sendMessage('Hit',filename=OutputFileName,peaks=peaks)
 			
-		     	self.peaks_all_frame.append([res[7],res[8]])
-	                percent = (float(res[6])/(self.total))*100.
-			hitrate= (float(self.hit)/float(res[6]+1))*100.
-			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f   %6.2f     %04d \r'%(percent,hitrate,res[1],res[2],res[3],res[4],res[5]),
+		     	self.peaks_all_frame.append([len(peaks),fname])
+	                percent = (float(index)/(self.total))*100.
+			hitrate= (float(self.hit)/float(index+1))*100.
+			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
 	             	sys.stdout.flush()
 			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
 			
@@ -433,23 +476,26 @@ class main():
 	  self.tasks.put(None)
         
 	
-	while res[6] != self.total-1:
+	while index != self.total-1:
 	    if self.signal:
 	     try:
-	        res=self.results.get(block=True, timeout=0.01)
-	        self.hit = self.hit + res[0]
-		if res[0] == 1: 
-			   OutputFileName =os.path.join(self.IO.procdir,"HDF5", os.path.splitext(str(res[8]))[0]+".h5")
+	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
+			self.hit = self.hit + hit
+			if hit == 1: 
 			    
-			   pub.sendMessage('Hit',OutputFileName)
+			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
+			    pub.sendMessage('Hit',filename=OutputFileName)
 			
-		self.peaks_all_frame.append([res[7],res[8]])
-	        percent = (float(res[6])/(self.total))*100.
-		hitrate= (float(self.hit)/float(res[6]))*100.
- 		pub.sendMessage('Progress',percent, hitrate)
-		print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f   %6.2f     %04d \r'%(percent,hitrate,res[1],res[2],res[3],res[4],res[5]),
-	        sys.stdout.flush()
+		     	self.peaks_all_frame.append([len(peaks),fname])
+	                percent = (float(index)/(self.total))*100.
+			hitrate= (float(self.hit)/float(index+1))*100.
+			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
+	             	sys.stdout.flush()
+			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
+			
+ 		     	
 	     except: pass
+		     
 	    else: break    
 	#print 'Job progression... %5.1f %% --- Current hit-rate... %5.1f %% \r'%((float(res[6])/(total))*100.,((float(hit)/(total))*100.)),    		
 	#sys.stdout.flush()
@@ -773,36 +819,31 @@ if __name__ == '__main__':
 	HitFinderParser.add_option('--debug' ,action='store_true',help='Used only for debugging')
 	
 	(options,args)=HitFinderParser.parse_args(argv)
-        IO=IO()
+        
+	
+	IO=IO()
 	X=XSetup()
 	HF=HFParams()
-	#Frelon=Frelon()
-	#Correction=Correction(None)
 	presenter()
 	start=10770
-        for i in range(0,24):
+        for i in range(0,1):
           num=start+i*10
-	  IO.datadir='/Volumes/reggiani/LS2253_JULY2014/REMOTE_DATA/mem3/edf%i'%num#os.getcwd()
-	  #print IO.datadir
-          #try:
+	  IO.datadir='/Users/Nico/prog/NPC/img'#os.getcwd()
 	  os.chdir(IO.datadir)
-          IO.procdir='/Volumes/reggiani/LS2253_JULY2014/mem3'
-	  IO.root=os.path.join('mem3_fre_%i'%num)
-       #   print IO.root
-   	  IO.bkg=[0]
-   	  #presenter()
-	  #os.chdir(path2)
-	  num_files=len(glob.glob('*.edf'))
-          if num_files == 1681:
-           print "============================================\n" 
-   	   print "Now Hit Finding in %s" %IO.datadir
-	   main(IO,XSetup,HFParams,True)
-	   print "Finished  Hit Finding in %s\n" %IO.datadir
-	   print "============================================\n" 
-	  else  :
-            print "Scan not finished... Waiting up"
-            time.sleep(60)
-        #  except: print "No such file or directory"
+          IO.procdir='/Users/Nico/prog/NPC'
+	  IO.root=os.path.join('mem3_fre_')
+          IO.bkg=[0]
+   	  num_files=len(glob.glob('*.edf'))
+          #if num_files == 1681:
+          print "============================================\n" 
+   	  print "Now Hit Finding in %s" %IO.datadir
+	  main(IO,XSetup,HFParams,True)
+	  print "Finished  Hit Finding in %s\n" %IO.datadir
+	  print "============================================\n" 
+	  #else  :
+          #  print "Scan not finished... Waiting up"
+          #  time.sleep(60)
+        
 		
 	
     

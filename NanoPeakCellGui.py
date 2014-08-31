@@ -8,6 +8,7 @@ except: from wx.lib.pubsub import pub
 import numpy as np
 from matplotlib import use as mpl_use
 mpl_use('WXAgg')
+from matplotlib.patches import Circle
 from matplotlib.figure import Figure
 import matplotlib.font_manager as fm
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas, NavigationToolbar2WxAgg as NavigationToolbar
@@ -48,12 +49,12 @@ class XSetup():
     beam_y=516.923
     
 class HFParams():
-
     threshold=40
     DoBkgCorr=True
     DoDarkCorr=True
     DoFlatCorr=True
-    DoDistCorr=True
+    DoDist=True
+    DoPeakSearch=True
     npixels=20
     nbkg=1
     bkg=1
@@ -133,7 +134,7 @@ class HitView(wx.Panel):
 	sizer_dir.AddSpacer(5)
 	Dir=wx.StaticText(self,-1,"Directory  ")
 	Dir.SetFont(font1)
-	self.Dir=wx.TextCtrl(self,-1,"/Volumes/apollinaire/SYNCHROTRONS/2014/ID23_06072014/ID23EH2/rsFold/MeshScan_04",size=(120,20))
+	self.Dir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC/img",size=(120,20))
 	self.Dir.SetFont(font1)
 	self.Browse=wx.Button(self,-1,"Browse",size=(75,-1))
 	self.Browse.SetFont(font1)
@@ -148,7 +149,7 @@ class HitView(wx.Panel):
 	sizer_dset.AddSpacer(5)
 	Dset=wx.StaticText(self, -1,"Dataset   ")
 	Dset.SetFont(font1)
-	self.Dset=wx.TextCtrl(self,-1,"mesh-mx1583_1",size=(120,20))
+	self.Dset=wx.TextCtrl(self,-1,"mem3",size=(120,20))
 	self.Dset.SetFont(font1)
 	sizer_dset.Add(Dset,proportion, border =2,flag=flags_L)
 	sizer_dset.AddSpacer(5)
@@ -160,7 +161,7 @@ class HitView(wx.Panel):
 	sizer_procdir.AddSpacer(5)
 	ProcDir=wx.StaticText(self, -1,"OutPut Dir")
 	ProcDir.SetFont(font1)
-	self.PDir=wx.TextCtrl(self,-1,"/Volumes/apollinaire/SYNCHROTRONS/2014/ID23_06072014/ID23EH2/rsFold/MeshScan_04",size=(120,20))
+	self.PDir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC/img",size=(120,20))
 	self.PDir.SetFont(font1)
 	self.Browse2=wx.Button(self,-1,"Browse",size=(75,-1))
 	self.Browse2.SetFont(font1)
@@ -176,7 +177,7 @@ class HitView(wx.Panel):
 	sizer_ext.AddSpacer(5)
 	Ext=wx.StaticText(self, -1,"File extension")
 	Ext.SetFont(font1)
-	self.Ext=wx.TextCtrl(self,-1,".cbf",size=(120,20))
+	self.Ext=wx.TextCtrl(self,-1,".edf",size=(120,20))
 	self.Ext.SetFont(font1)
 	sizer_ext.Add(Ext,proportion, border =2,flag=flags_L)
 	sizer_ext.AddSpacer(5)
@@ -221,11 +222,11 @@ class HitView(wx.Panel):
 	sizer_beamcenter.AddSpacer(5)
 	BCX=wx.StaticText(self, -1,"Beam Center:     X")
 	BCX.SetFont(font1)
-	self.X=wx.TextCtrl(self,-1,"510",size=(50,20))
+	self.X=wx.TextCtrl(self,-1,"523",size=(50,20))
 	self.X.SetFont(font1)
 	BCY=wx.StaticText(self, -1," Y")
 	BCY.SetFont(font1)
-	self.Y=wx.TextCtrl(self,-1,"521",size=(50,20))
+	self.Y=wx.TextCtrl(self,-1,"512",size=(50,20))
 	self.Y.SetFont(font1)
 	sizer_beamcenter.Add(BCX,proportion, border =2,flag=flags_L)
 	sizer_beamcenter.AddSpacer(5)
@@ -254,7 +255,7 @@ class HitView(wx.Panel):
 	sizer_threshold.AddSpacer(5)
 	Thresh=wx.StaticText(self, -1,"Threshold:           ")
 	Thresh.SetFont(font1)
-	self.Thresh=wx.TextCtrl(self,-1,"40",size=(40,20))
+	self.Thresh=wx.TextCtrl(self,-1,"30",size=(40,20))
 	self.Thresh.SetFont(font1)
 	sizer_threshold.Add(Thresh,proportion, border =2,flag=flags_L)
 	sizer_threshold.AddSpacer(5)
@@ -461,7 +462,7 @@ class HitView(wx.Panel):
        
        
        self.HFParams=HFParams()
-       self.HFParams.threshold=self.Thresh.GetValue()
+       self.HFParams.threshold=int(self.Thresh.GetValue())
        self.HFParams.npixels=int(self.NP.GetValue())
        self.HFParams.procs=int(self.cpus.GetValue())
        self.HFParams.DoDarkCorr=self.det.GetValue()
@@ -567,14 +568,14 @@ class RightPanel(wx.Panel):
 	sizer_slidermin=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStatic=wx.StaticText(self,-1,"Min Value")
 	SliderStatic.SetFont(font1)
-	self.sld_min=wx.Slider(self,-1,3000,0,10000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.sld_min=wx.Slider(self,-1,0,0,1000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermin.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermin.Add(self.sld_min,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_slidermax=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStaticMax=wx.StaticText(self,-1,"Max Value")
 	SliderStaticMax.SetFont(font1)
-	self.sld_max=wx.Slider(self,-1,50000,10000,100000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.sld_max=wx.Slider(self,-1,500,200,5000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermax.Add(SliderStaticMax,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermax.Add(self.sld_max,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
@@ -733,15 +734,31 @@ class PlotStats(wx.Panel):
     
     
     #----------------------------------------------------------------------
-    def DisplayHit(self,filename):
+    def DisplayHit(self,filename,peaks):
 #        filename=message.data
-	wx.CallAfter(self.OpenH5,filename)
+	wx.CallAfter(self.OpenH5,filename,peaks)
     
     #----------------------------------------------------------------------
-    def OpenH5(self,filename):
+    def display_peaks(self, axes,peaks,color='y',radius=5,thickness=0):
+      for peak in peaks:
+       circle=Circle((peak[0],peak[1]),radius,color=color,fill=False)
+       circle.set_gid("circle")
+       axes.add_artist(circle)
+    
+    def OpenH5(self,filename,peaks=None):
         
-        f=h5py.File(filename,'r')
-        if self.dset== []:
+	# Remove circle from fig
+	artists=self.axes.findobj()
+	for artist in artists:
+	   try:
+	     if artist.get_gid() == "circle": 
+	       artist.remove() 
+	   except: pass
+        
+	#Open h5 file and
+	#Should pass the data along, not the file !!
+	f=h5py.File(filename,'r')
+	if self.dset== []:
 	   self.dset=f[f.keys()[0]][:]
 	   self.frame=self.axes.imshow(self.dset*self.boost,vmin=self.vmin*np.sqrt(self.boost), vmax=self.vmax*np.sqrt(self.boost),cmap=self.cmap)
 	
@@ -750,6 +767,7 @@ class PlotStats(wx.Panel):
 	   new_dset=self.dset*self.boost
 	   self.frame.set_data(new_dset)
 	f.close()
+	if peaks != None: self.display_peaks(self.axes,peaks)
 	self.canvas.draw()
 
     #----------------------------------------------------------------------

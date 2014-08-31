@@ -5,6 +5,7 @@ import numpy as np
 #from wx.lib.pubsub import Publisher as pub
 from wx.lib.pubsub import pub
 import pyFAI, pyFAI.distortion, pyFAI.detectors, pyFAI._distortion
+from scipy.ndimage.filters import gaussian_filter
 
 try:
  from xfel.cxi.cspad_ana.cspad_tbx import dpack
@@ -16,11 +17,38 @@ except ImportError:
 
 
 
+def detect_peaks(data, threshold,display=True):
+    """
+    Takes an image and detect the peaks. using a guassian filter.
+    Returns a list of peaks with x,y and intensity of the peak.
+    """
+    data[0:1023,1004:1023]=0
+    gaussian = gaussian_filter(data,[1,1])
+    detected_peaks=[]
+    more_peaks = True
+    I = 0
+    x = 0
+    y = 0 
+    i = 0
     
-def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
+    while more_peaks == True:
+     I=np.max(gaussian)
+     y,x = np.where( gaussian == I)
+     if display:
+       print 'Peak # %i: %i, %i, %i' %(i,x[0],y[0] ,data[y[0],x[0]])
+     gaussian[y-5:y+5,x-5:x+5] = 0
+     i=i+1
+     if  data[y[0],x[0]] <= 10 : 
+        more_peaks=False
+     else: detected_peaks.append([x,y,I])
+     
+    return detected_peaks
+        
+def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
       
       hit=0
       fname=IO.fname_list[index]
+      detected_peaks=[]
       try :
 		img = fabio.open(fname)
       except:
@@ -28,53 +56,17 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 		return
 		
       if img.data.shape == Frelon.resolution:
-		#if HFParams.DoBkgCorr:
-			 
-			 # Substract dark image
-			 #Substracting the dark and dividing by the flatfield
-			 #img.data=(img.data.astype(np.float32) - Params.dark)/flatfield
-			 #Correction of the distortion
-			 #img.data=dist.correct(img.data)
-			 
+		
 		#Apply the dark, flatfield and distortion correction (as specified by the user)
 		img.data=DataCorr.apply_correction(img.data,HFParams.DoDarkCorr,HFParams.DoFlatCorr,HFParams.DoDist)
 			 
 		#Remove beam stop area (i.e = 0)
 		img.data[XSetup.beam_y-15:XSetup.beam_y+15,XSetup.beam_x-15:XSetup.beam_x+15]=0
 			 
-		if HFParams.DoBkgCorr:
+		#BkgCorr with pyFAI Azimuthal Integrator
+		working=AI.ai.separate(img.data,npt_rad=1024, npt_azim=512, unit="2th_deg",percentile=50, mask=AI.mask,restore_mask=False)[0]
 		
-			 #Image integration  
-			 scaleimg = fabio.fabioimage.fabioimage.integrate_area(img,[50,50,250,250]) 
-			
-			 #Difference between all bkg img and current img
-			 scalesdiff = BKG.scales - np.float(scaleimg)
-                         #Get the correct bkg img id
-			 minid = np.where(np.abs(scalesdiff)<=np.min(np.abs(scalesdiff)))[0]
-			
-			 #Calculating scaling factor
-			 scale = scaleimg / BKG.scales[minid]
-			 
-			 # Calculating bkg corrected img
-			 working = img.data.astype(np.float32) -  scale * BKG.data[minid].data.astype(np.float32)
-			 #working = img.data.astype(np.float32)
-			 #Do max proj - Not used in current script
-			 #maxids = np.where(working>self.param.max_proj)
-			 #self.param.max_proj[maxids] = working[maxids]
-			 imgmax,imgmin,imgmed,imgscalebkg, imgtypebkg= np.max(working), np.min(working), np.median(working), scale, minid[0]
-		else:
-			 working=img.data.astype(np.float32)
-			 
-			 #Get ids of negative peaks
-			 #negids = np.where(working<0)
-			 #Setting these neg valus to 0
-			 #working[negids]=0
-			 
-			 # Setting these neg value to 0
-			 imgmax,imgmin,imgmed,imgscalebkg, imgtypebkg= np.max(working), np.min(working), np.median(working), 0, 0
-			 
-		# Get Max, min, med, scaling factor, and bkg matching frame id of current frame
-		#imgmax,imgmin,imgmed,imgscalebkg, imgtypebkg= np.max(working), np.min(working), np.median(working), scale, minid[0]
+		imgmax,imgmin,imgmed = np.max(working), np.min(working), np.median(working)
 			 
 		# Get number of peaks above threshold in the current frame
 		cropped=working[20:Frelon.resolution[1]-20,20:Frelon.resolution[1]-20]
@@ -87,12 +79,12 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 			hit = 1
 			root=os.path.basename(fname)
 			root=os.path.splitext(root)[0]
-			
+			if HFParams.DoPeakSearch:
+			    detected_peaks=detect_peaks(working,HFParams.threshold,False)
+			    
 			if IO.edf:
 			    OutputFileName =os.path.join(IO.procdir, IO.EDFDir,"%s.edf" %root)
-			    
 			    img.data = working
-			   
 			    img.write(OutputFileName)
 			    
 			
@@ -101,7 +93,6 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 			    
 			    OutputFileName =os.path.join(IO.procdir, IO.H5Dir,"%s.h5" %root)
 			    #OutputFileName =os.path.join(IO.procdir, "HDF5/%s.h5" %root)
-			    
 			    OutputFile = h5py.File(OutputFileName,'w')
 			    working[0:1023,1004:1023]=0
 			    OutputFile.create_dataset("data",data=working.astype(np.int32))
@@ -111,7 +102,6 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 			if IO.pickle:
 				   pixels=flex.int(working.astype(np.int32))
 				   pixel_size=Frelon.pixel_size
-				   
 				   data = dpack(data=pixels,
 				                distance=XSetup.distance,
 					        pixel_size=pixel_size,
@@ -121,12 +111,8 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 						ccd_image_saturation=Frelon.overload,
 						saturated_value=Frelon.overload)
 				   data=crop_image_pickle(data)
-				   #OutputFileName =os.path.join(IO.procdir, "%s.pickle" %root)
-			 	   OutputFileName =os.path.join(IO.procdir, IO.PicklesDir , "%s.pickle" %root)
+				   OutputFileName =os.path.join(IO.procdir, IO.PicklesDir , "%s.pickle" %root)
 				   easy_pickle.dump(OutputFileName,data)
-				 
-				       
-				 
 				 
 		else: working =0	 
 
@@ -135,5 +121,5 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,BKG,index):
 			print 'Warning : data shape problem for file %s, file skiped '%fname
 			#continue  
 	
-      return [hit,imgmax,imgmin,imgmed,imgscalebkg, imgtypebkg,index,len(peaks),fname,working]
+      return [hit,imgmax,imgmin,imgmed,index,detected_peaks,fname,working]
     
