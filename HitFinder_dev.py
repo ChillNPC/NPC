@@ -6,6 +6,7 @@ import numpy as np
 from wx.lib.pubsub import pub
 import pyFAI, pyFAI.distortion, pyFAI.detectors, pyFAI._distortion
 from scipy.ndimage.filters import gaussian_filter
+import peakfind as pf
 
 try:
  from xfel.cxi.cspad_ana.cspad_tbx import dpack
@@ -48,13 +49,13 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
       
       hit=0
       fname=IO.fname_list[index]
-      detected_peaks=[]
+      peaks=[]
+      peakslist=[]
       try :
 		img = fabio.open(fname)
       except:
 		print 'Warning : problem while opening file %s, file skiped '%fname
 		return
-		
       if img.data.shape == Frelon.resolution:
 		
 		#Apply the dark, flatfield and distortion correction (as specified by the user)
@@ -79,9 +80,14 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			hit = 1
 			root=os.path.basename(fname)
 			root=os.path.splitext(root)[0]
+			
+			
 			if HFParams.DoPeakSearch:
-			    detected_peaks=detect_peaks(working,HFParams.threshold,False)
 			    
+			    peaks=pf.find_local_max(working[0:1023,0:1004].astype(np.float),d_rad=1,threshold=HFParams.threshold)
+			    #detect_peaks(working,HFParams.threshold,False)
+			    for i in range(0,peaks.shape[1]): peakslist.append([peaks[0][i],peaks[1][i],working[peaks[1][i],peaks[0][i]]])
+			    peakslist=np.array(peakslist)
 			if IO.edf:
 			    OutputFileName =os.path.join(IO.procdir, IO.EDFDir,"%s.edf" %root)
 			    img.data = working
@@ -96,6 +102,10 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			    OutputFile = h5py.File(OutputFileName,'w')
 			    working[0:1023,1004:1023]=0
 			    OutputFile.create_dataset("data",data=working.astype(np.int32))
+			    if HFParams.DoPeakSearch:
+			     g1=OutputFile.create_group("processing")
+                             g2=g1.create_group("hitfinder")
+                             g2.create_dataset("peakinfo",data=peakslist.astype(np.int32))
 			    OutputFile.close()
 				 
 			#if conversion to Pickle
@@ -121,5 +131,5 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			print 'Warning : data shape problem for file %s, file skiped '%fname
 			#continue  
 	
-      return [hit,imgmax,imgmin,imgmed,index,detected_peaks,fname,working]
+      return [hit,imgmax,imgmin,imgmed,index,peakslist,fname,working]
     

@@ -560,7 +560,7 @@ class RightPanel(wx.Panel):
 	sizer_sliderboost=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStatic=wx.StaticText(self,-1,"Intensity Boost")
 	SliderStatic.SetFont(font1)
-	self.sld_boost=wx.Slider(self,-1,5,1,100,wx.DefaultPosition,(100, 10),wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.sld_boost=wx.Slider(self,-1,1,1,100,wx.DefaultPosition,(100, 10),wx.SL_HORIZONTAL | wx.SL_LABELS)
 	self.sld_boost.SetFont(font1)
 	sizer_sliderboost.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_sliderboost.Add(self.sld_boost,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
@@ -568,14 +568,14 @@ class RightPanel(wx.Panel):
 	sizer_slidermin=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStatic=wx.StaticText(self,-1,"Min Value")
 	SliderStatic.SetFont(font1)
-	self.sld_min=wx.Slider(self,-1,0,0,1000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.sld_min=wx.Slider(self,-1,0,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermin.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermin.Add(self.sld_min,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_slidermax=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStaticMax=wx.StaticText(self,-1,"Max Value")
 	SliderStaticMax.SetFont(font1)
-	self.sld_max=wx.Slider(self,-1,500,200,5000,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.sld_max=wx.Slider(self,-1,20,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermax.Add(SliderStaticMax,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermax.Add(self.sld_max,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
@@ -584,7 +584,7 @@ class RightPanel(wx.Panel):
 	self.cmap=wx.Choice(self,-1,choices=self.cmap_list)
 	CmapStatic.SetFont(font1)
 	self.cmap.SetFont(font1)
-	self.cmap.SetStringSelection('Blues')
+	self.cmap.SetStringSelection('gnuplot')
 	sizer_cmap.Add(CmapStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL,1)
 	sizer_cmap.AddSpacer(10)
 	sizer_cmap.Add(self.cmap,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL,1)
@@ -688,10 +688,10 @@ class PlotStats(wx.Panel):
         wx.Panel.__init__(self,parent)
         self.parent=parent
 	self.prop = fm.FontProperties(size=10)
-	self.boost=5
-	self.vmin=10
-	self.vmax=100
-	self.cmap='Blues'
+	self.boost=1
+	self.vmin=0
+	self.vmax=20
+	self.cmap='gnuplot'
         self.CreateMainPanel()
         pub.subscribe(self.DisplayHit,'Hit')
 	
@@ -766,6 +766,8 @@ class PlotStats(wx.Panel):
 	   self.dset=f[f.keys()[0]][:]
 	   new_dset=self.dset*self.boost
 	   self.frame.set_data(new_dset)
+	try:peaks=f['processing/hitfinder/peakinfo'][:]
+	except: peaks=None
 	f.close()
 	if peaks != None: self.display_peaks(self.axes,peaks)
 	self.canvas.draw()

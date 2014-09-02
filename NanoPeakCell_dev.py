@@ -282,9 +282,6 @@ class MProcess(multiprocessing.Process):
 	    self.signal=False
 	except: return
 
-#class Bkg():
-#   scales=[]
-#   data=[]
    
 
 	
@@ -329,10 +326,6 @@ class main():
 	
 	self.SaveStatsStart()
 	
-	#if self.HFParams.DoBkgCorr:
-	#   self.IO.get_bkg()
-	    
-	#   self.BkgCalc()
 	   
 	self.StartMP()
 	self.FindHits()
