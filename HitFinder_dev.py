@@ -18,32 +18,6 @@ except ImportError:
 
 
 
-def detect_peaks(data, threshold,display=True):
-    """
-    Takes an image and detect the peaks. using a guassian filter.
-    Returns a list of peaks with x,y and intensity of the peak.
-    """
-    data[0:1023,1004:1023]=0
-    gaussian = gaussian_filter(data,[1,1])
-    detected_peaks=[]
-    more_peaks = True
-    I = 0
-    x = 0
-    y = 0 
-    i = 0
-    
-    while more_peaks == True:
-     I=np.max(gaussian)
-     y,x = np.where( gaussian == I)
-     if display:
-       print 'Peak # %i: %i, %i, %i' %(i,x[0],y[0] ,data[y[0],x[0]])
-     gaussian[y-5:y+5,x-5:x+5] = 0
-     i=i+1
-     if  data[y[0],x[0]] <= 10 : 
-        more_peaks=False
-     else: detected_peaks.append([x,y,I])
-     
-    return detected_peaks
         
 def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
       
@@ -85,9 +59,10 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			if HFParams.DoPeakSearch:
 			    
 			    peaks=pf.find_local_max(working[0:1023,0:1004].astype(np.float),d_rad=1,threshold=HFParams.threshold)
-			    #detect_peaks(working,HFParams.threshold,False)
+			    
 			    for i in range(0,peaks.shape[1]): peakslist.append([peaks[0][i],peaks[1][i],working[peaks[1][i],peaks[0][i]]])
 			    peakslist=np.array(peakslist)
+			
 			if IO.edf:
 			    OutputFileName =os.path.join(IO.procdir, IO.EDFDir,"%s.edf" %root)
 			    img.data = working

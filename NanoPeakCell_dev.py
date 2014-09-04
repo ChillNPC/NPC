@@ -364,10 +364,10 @@ class main():
 	print >> stat, "Data from : %s" %self.IO.datadir
 	print >> stat, "Files: %s" %self.IO.root
 	print >> stat, "Threshold: %s" %self.HFParams.threshold
-	print >> stat, "Bkg correction: %s" %self.HFParams.DoDarkCorr
-	if self.HFParams.DoDarkCorr:
-	  print >> stat, "Bkg img: %s" %' '.join(self.IO.bname_list)
-	  print >> stat, "Number of bkg images used: %s" %self.HFParams.bkg
+	#print >> stat, "Bkg correction: %s" %self.HFParams.DoDarkCorr
+	#if self.HFParams.DoDarkCorr:
+	#  print >> stat, "Bkg img: %s" %' '.join(self.IO.bname_list)
+	#  print >> stat, "Number of bkg images used: %s" %self.HFParams.bkg
 	print >> stat, "Beam X: %i" %self.XSetup.beam_x
 	print >> stat, "Beam Y: %i" %self.XSetup.beam_y
 	print >> stat, "Minimal number of peaks in frame: %i" %self.HFParams.npixels
@@ -436,7 +436,6 @@ class main():
     ###############################################
     def FindHits(self):
     	self.total=len(self.IO.fname_list)
-	print self.total
 	print '\n= Job progression = Hit rate =    Max   =   Min   = Median = #Peaks '
 	self.hit=0
 	self.nbfile=0

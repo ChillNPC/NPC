@@ -15,9 +15,9 @@ from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas, Na
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from threading import Thread
 import NanoPeakCell_dev as Hit
-
+import wx.lib.buttons as buttons
 import fabio, pyFAI, pyFAI.distortion, pyFAI.detectors
-
+import peakfind as pf
 try : 
     imp.find_module('h5py')
     H5=True
@@ -77,8 +77,6 @@ class IO():
       
     def get_all_frames(self):
         s="%s*%s"%(self.root,self.ext)
-	print s
-	print glob.glob(s)
 	return glob.glob(s)
 	
     
@@ -86,9 +84,8 @@ class IO():
         
 	try:self.bkg=self.bkg.split(',')
 	except: self.bkg=self.bkg
-	print self.bkg
 	for img in self.bkg:
-	   print img
+	   
 	   
 	   img=str(img)
 	   if len(img) <= 3:
@@ -112,7 +109,7 @@ class HitView(wx.Panel):
     
     #----------------------------------------------------------------------
     def OnDone(self):
-	self.HitFinder.Enable()
+	self.HitFinder.SetValue(False)
 
     
     #----------------------------------------------------------------------
@@ -132,7 +129,7 @@ class HitView(wx.Panel):
 	#Select the directory containing the frames
 	sizer_dir=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_dir.AddSpacer(5)
-	Dir=wx.StaticText(self,-1,"Directory  ")
+	Dir=wx.StaticText(self,-1,"Directory   ")
 	Dir.SetFont(font1)
 	self.Dir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC/img",size=(120,20))
 	self.Dir.SetFont(font1)
@@ -147,7 +144,7 @@ class HitView(wx.Panel):
 	#Select dset (root name)
 	sizer_dset=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_dset.AddSpacer(5)
-	Dset=wx.StaticText(self, -1,"Dataset   ")
+	Dset=wx.StaticText(self, -1,"Dataset    ")
 	Dset.SetFont(font1)
 	self.Dset=wx.TextCtrl(self,-1,"mem3",size=(120,20))
 	self.Dset.SetFont(font1)
@@ -161,7 +158,7 @@ class HitView(wx.Panel):
 	sizer_procdir.AddSpacer(5)
 	ProcDir=wx.StaticText(self, -1,"OutPut Dir")
 	ProcDir.SetFont(font1)
-	self.PDir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC/img",size=(120,20))
+	self.PDir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC",size=(120,20))
 	self.PDir.SetFont(font1)
 	self.Browse2=wx.Button(self,-1,"Browse",size=(75,-1))
 	self.Browse2.SetFont(font1)
@@ -177,7 +174,7 @@ class HitView(wx.Panel):
 	sizer_ext.AddSpacer(5)
 	Ext=wx.StaticText(self, -1,"File extension")
 	Ext.SetFont(font1)
-	self.Ext=wx.TextCtrl(self,-1,".edf",size=(120,20))
+	self.Ext=wx.TextCtrl(self,-1,".edf",size=(102,20))
 	self.Ext.SetFont(font1)
 	sizer_ext.Add(Ext,proportion, border =2,flag=flags_L)
 	sizer_ext.AddSpacer(5)
@@ -199,7 +196,8 @@ class HitView(wx.Panel):
 	
 	#Distance
 	sizer_dist=wx.BoxSizer(wx.HORIZONTAL)
-	dist=wx.StaticText(self, -1,"Distance (mm)")
+	sizer_dist.AddSpacer(5)
+	dist=wx.StaticText(self, -1,"Distance (mm) ")
 	self.dist=wx.TextCtrl(self,-1,"98.605",size=(50,20))
 	self.dist.SetFont(font1)
 	dist.SetFont(font1)
@@ -209,6 +207,7 @@ class HitView(wx.Panel):
 	
 	#Wavelength
 	sizer_wl=wx.BoxSizer(wx.HORIZONTAL)
+	sizer_wl.AddSpacer(5)
 	wl=wx.StaticText(self, -1,"Wavelength (A)")
 	self.wl=wx.TextCtrl(self,-1,"0.832",size=(50,20))
 	self.wl.SetFont(font1)
@@ -220,7 +219,7 @@ class HitView(wx.Panel):
 	#Beam center
 	sizer_beamcenter=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_beamcenter.AddSpacer(5)
-	BCX=wx.StaticText(self, -1,"Beam Center:     X")
+	BCX=wx.StaticText(self, -1,"Beam Center   X")
 	BCX.SetFont(font1)
 	self.X=wx.TextCtrl(self,-1,"523",size=(50,20))
 	self.X.SetFont(font1)
@@ -255,10 +254,10 @@ class HitView(wx.Panel):
 	sizer_threshold.AddSpacer(5)
 	Thresh=wx.StaticText(self, -1,"Threshold:           ")
 	Thresh.SetFont(font1)
-	self.Thresh=wx.TextCtrl(self,-1,"30",size=(40,20))
+	self.Thresh=wx.TextCtrl(self,-1,"10",size=(40,20))
 	self.Thresh.SetFont(font1)
 	sizer_threshold.Add(Thresh,proportion, border =2,flag=flags_L)
-	sizer_threshold.AddSpacer(5)
+	sizer_threshold.AddSpacer(37)
 	sizer_threshold.Add(self.Thresh,proportion, border =2,flag=flags_L)
 	
 	
@@ -266,7 +265,7 @@ class HitView(wx.Panel):
 	sizer_peaks=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_peaks.AddSpacer(5)
 	NP=wx.StaticText(self, -1,"Min number of pixels:   ")
-	self.NP=wx.TextCtrl(self,-1,"5",size=(40,20))
+	self.NP=wx.TextCtrl(self,-1,"50",size=(40,20))
 	NP.SetFont(font1)
 	self.NP.SetFont(font1)
 	sizer_peaks.Add(NP,proportion, border =2,flag=flags_L)
@@ -284,7 +283,20 @@ class HitView(wx.Panel):
 	sizer_cpus.AddSpacer(5)
 	sizer_cpus.Add(self.cpus,proportion, border =2,flag=flags_L)
 	
-        ImageCorrection = wx.StaticBox(self, proportion, "Image Correction and Output format(s)",size=(100,300))
+        #Find Bp position
+	sizer_Bp=wx.BoxSizer(wx.HORIZONTAL)
+	sizer_Bp.AddSpacer(5)
+	Bp=wx.StaticText(self, -1,"Find Bragg peaks position")
+	Bp.SetFont(font1)
+	self.Bp=wx.CheckBox(self,-1)
+        self.Bp.SetValue(True)
+        self.Bp.SetFont(font1)
+        sizer_Bp.Add(self.Bp,proportion, border =2,flag=flags_L)
+	sizer_Bp.AddSpacer(5)
+	sizer_Bp.Add(Bp,proportion, border =2,flag=flags_L)
+	
+	
+	ImageCorrection = wx.StaticBox(self, proportion, "Image Correction and Output format(s)",size=(100,300))
         
 
 	# Detector Correction
@@ -299,59 +311,59 @@ class HitView(wx.Panel):
         sizer_det.AddSpacer(3)
 	sizer_det.Add(det, proportion, border=2, flag=flags_L)
 	# Bkg Correction
-	sizer_corr=wx.BoxSizer(wx.HORIZONTAL)
-	sizer_corr.AddSpacer(5)
-	corr=wx.StaticText(self, -1,"Background Substraction")
-	self.corr=wx.CheckBox(self,-1)
-	self.corr.SetFont(font1)
-	self.corr.SetValue(True)
-	corr.SetFont(font1)
-	sizer_corr.Add(self.corr,proportion, border =2,flag=flags_L)
-	sizer_corr.AddSpacer(3)
-	sizer_corr.Add(corr,proportion, border =2,flag=flags_L)
+	#sizer_corr=wx.BoxSizer(wx.HORIZONTAL)
+	#sizer_corr.AddSpacer(5)
+	#corr=wx.StaticText(self, -1,"Background Substraction")
+	#self.corr=wx.CheckBox(self,-1)
+	#self.corr.SetFont(font1)
+	#self.corr.SetValue(True)
+	#corr.SetFont(font1)
+	#sizer_corr.Add(self.corr,proportion, border =2,flag=flags_L)
+	#sizer_corr.AddSpacer(3)
+	#sizer_corr.Add(corr,proportion, border =2,flag=flags_L)
 	
 	# Select images 
-	sizer_bkg=wx.BoxSizer(wx.HORIZONTAL)
-	sizer_bkg.AddSpacer(5)
-	bkg=wx.StaticText(self, -1,"Background images:")
-	self.bkg=wx.TextCtrl(self,-1,"0",size=(140,20))
-	self.bkg.SetFont(font1)
-	bkg.SetFont(font1)
-	sizer_bkg.Add(bkg,proportion, border =2,flag=flags_L)
-	sizer_bkg.AddSpacer(3)
-	sizer_bkg.Add(self.bkg,proportion, border =2,flag=flags_L)
+	#sizer_bkg=wx.BoxSizer(wx.HORIZONTAL)
+	#sizer_bkg.AddSpacer(5)
+	#bkg=wx.StaticText(self, -1,"Background images:")
+	#self.bkg=wx.TextCtrl(self,-1,"0",size=(140,20))
+	#self.bkg.SetFont(font1)
+	#bkg.SetFont(font1)
+	#sizer_bkg.Add(bkg,proportion, border =2,flag=flags_L)
+	#sizer_bkg.AddSpacer(3)
+	#sizer_bkg.Add(self.bkg,proportion, border =2,flag=flags_L)
 	
 	#Testset
-	sizer_nbkg=wx.BoxSizer(wx.HORIZONTAL)
-	sizer_nbkg.AddSpacer(5)
-	nbkg=wx.StaticText(self, -1,"Number of images for bkg:")
-	self.nbkg=wx.TextCtrl(self,-1,"1",size=(40,20))
-	self.nbkg.SetFont(font1)
-	nbkg.SetFont(font1)
-	sizer_nbkg.Add(nbkg,proportion, border =2,flag=flags_L)
-	sizer_nbkg.AddSpacer(3)
-	sizer_nbkg.Add(self.nbkg,proportion, border =2,flag=flags_L)
+	#sizer_nbkg=wx.BoxSizer(wx.HORIZONTAL)
+	#sizer_nbkg.AddSpacer(5)
+	#nbkg=wx.StaticText(self, -1,"Number of images for bkg:")
+	#self.nbkg=wx.TextCtrl(self,-1,"1",size=(40,20))
+	#self.nbkg.SetFont(font1)
+	#nbkg.SetFont(font1)
+	#sizer_nbkg.Add(nbkg,proportion, border =2,flag=flags_L)
+	#sizer_nbkg.AddSpacer(3)
+	#sizer_nbkg.Add(self.nbkg,proportion, border =2,flag=flags_L)
 	
 	sizer_hit=wx.BoxSizer(wx.HORIZONTAL)
-	self.HitFinder=wx.Button(self,-1,"Find Hits !",size=(75,-1))
+	self.HitFinder=wx.ToggleButton(self,-1,"Find Hits",size=(75,-1))
 	self.HitFinder.SetFont(font1)
-	self.Stop=wx.Button(self,-1,"  Stop ",size=(75,-1))
-	self.Stop.SetFont(font1)
-	
-	
+	#self.Stop=wx.Button(self,-1,"  Stop ",size=(75,-1))
+	#self.Stop.SetFont(font1)
 	
 	sizer_hit.Add(self.HitFinder,proportion, border =2,flag=flags_L)
-	sizer_hit.AddSpacer(5)
-	sizer_hit.Add(self.Stop,proportion, border =2,flag=flags_L)
+	#sizer_hit.AddSpacer(5)
+	#sizer_hit.Add(self.Stop,proportion, border =2,flag=flags_L)
 	
 	
 	
         sizer_format=wx.BoxSizer(wx.HORIZONTAL)
         FormatStatic=wx.StaticText(self, -1,"Convert files in :")
 	FormatStatic.SetFont(font1)
-        sizer_format.Add(FormatStatic, proportion, border=2, flag=flags_L)
+        sizer_format.AddSpacer(5)
+	sizer_format.Add(FormatStatic, proportion, border=2, flag=flags_L)
 
 	sizer_pickle=wx.BoxSizer(wx.HORIZONTAL)
+	sizer_pickle.AddSpacer(5)
 	self.pickle=wx.CheckBox(self,-1)
 	if cctbx == False:
 	    self.pickle.Disable()
@@ -365,6 +377,7 @@ class HitView(wx.Panel):
 	sizer_pickle.Add(picklestatic,proportion, border =2,flag=flags_L)
 	
 	sizer_h5=wx.BoxSizer(wx.HORIZONTAL)
+	sizer_h5.AddSpacer(5)
 	self.h5=wx.CheckBox(self,-1)
 	if H5 == False:
 	    self.h5.Disable()
@@ -377,7 +390,8 @@ class HitView(wx.Panel):
         sizer_h5.Add(h5static,proportion,border=2,flag=flags_L)
 
 	sizer_edf=wx.BoxSizer(wx.HORIZONTAL)
-        self.edf=wx.CheckBox(self,-1)
+        sizer_edf.AddSpacer(5)
+	self.edf=wx.CheckBox(self,-1)
         self.edf.SetValue(False)
         edfstatic=wx.StaticText(self, -1,"edf file format")
         edfstatic.SetFont(font1)
@@ -386,19 +400,20 @@ class HitView(wx.Panel):
 
 	sizer_v1 =  wx.StaticBoxSizer(HitBox, wx.VERTICAL)
 	sizer_v1.Add(sizer_threshold)
-	sizer_v1.AddSpacer(5)
 	sizer_v1.Add(sizer_peaks)
 	sizer_v1.Add(sizer_cpus)
+	sizer_v1.Add(sizer_Bp)
+	
 	
 	
 	sizer_v2= wx.StaticBoxSizer(ImageCorrection, wx.VERTICAL)
 	sizer_v2.Add(sizer_det)	
-	sizer_v2.Add(sizer_corr)
-	sizer_v2.AddSpacer(3)	
-	sizer_v2.Add(sizer_bkg)	
-	sizer_v2.AddSpacer(3)
-	sizer_v2.Add(sizer_nbkg)
-	sizer_v2.AddSpacer(10)
+	#sizer_v2.Add(sizer_corr)
+	sizer_v2.AddSpacer(10)	
+	#sizer_v2.Add(sizer_bkg)	
+	#sizer_v2.AddSpacer(3)
+	#sizer_v2.Add(sizer_nbkg)
+	#sizer_v2.AddSpacer(10)
 	sizer_v2.Add(sizer_format)
 	sizer_v2.Add(sizer_pickle)
 	sizer_v2.AddSpacer(2)
@@ -424,22 +439,23 @@ class HitView(wx.Panel):
 	mainsizer.Add(sizer_v3, 0, wx.EXPAND)
 	self.SetSizerAndFit(mainsizer)
 	
-	self.Bind(wx.EVT_CHECKBOX, self.OnCorr, self.corr)
-	self.Bind(wx.EVT_BUTTON, self.FindHits, self.HitFinder)
-        self.Bind(wx.EVT_BUTTON, self.OnStop, self.Stop)
+	#self.Bind(wx.EVT_CHECKBOX, self.OnCorr, self.corr)
+	self.Bind(wx.EVT_TOGGLEBUTTON,  self.OnToggle,self.HitFinder)
+        #self.Bind(wx.EVT_BUTTON, self.OnStop, self.Stop)
         self.Bind(wx.EVT_BUTTON, self.GetDir, self.Browse)
 	self.Bind(wx.EVT_BUTTON, self.GetDir2, self.Browse2)
 	
         
     
-    def OnStop(self, event):
+    def OnStop(self):
        self.HitFinder.Enable()
        pub.sendMessage('StopThreads')
        
-    # To be modified to create the objects of the dev version
-    def FindHits(self, event):
-       
-       self.HitFinder.Disable()
+    def OnToggle(self,e):
+        if self.HitFinder.GetValue(): self.FindHits() 
+	else: self.OnStop()
+	# To be modified to create the objects of the dev version
+    def FindHits(self):
        
        # Getting IO params
        self.IO=IO()
@@ -468,29 +484,30 @@ class HitView(wx.Panel):
        self.HFParams.DoDarkCorr=self.det.GetValue()
        self.HFParams.DoFlatCorr=self.det.GetValue()
        self.HFParams.DoDistCorr=self.det.GetValue()
-       
-       self.HFParams.DoBkgCorr=self.corr.GetValue()
-       self.IO.bkg=self.bkg.GetValue()
+       self.HFParams.DoPeakSearch=self.Bp.GetValue()
+       #self.HFParams.DoBkgCorr=self.corr.GetValue()
+       #self.IO.bkg=self.bkg.GetValue()
        #if bkg=='' and c==True:
        #   print 'Please provide the frame number you chose as bkg image'
 #	  return
-       self.HFParams.nbkg=int(self.nbkg.GetValue())
+       #self.HFParams.nbkg=int(self.nbkg.GetValue())
            
-       self.ht=HitThread(self.IO, self.XSetup,self.HFParams)
-
+       try:self.ht=HitThread(self.IO, self.XSetup,self.HFParams)
+       except: print "You did something wrong here..."
+    
     def GetDir(self, event):
-       dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.path)
+       dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.Dir.GetValue())
        if dlg.ShowModal() == wx.ID_OK:
                   self.path = dlg.GetPath()
 		  os.chdir(self.path)
 		  self.Dir.SetValue(self.path)
        dlg.Destroy()
     def GetDir2(self, event):
-        dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.path)
+        dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.PDir.GetValue())
         if dlg.ShowModal() == wx.ID_OK:
-                   #self.path = dlg.GetPath()
+                 path = dlg.GetPath()
                  #os.chdir(self.path)
-                 self.PDir.SetValue(self.path)
+                 self.PDir.SetValue(path)
         dlg.Destroy()
 
     def OnCorr(self,e):
@@ -514,8 +531,7 @@ class HitThread(Thread):
 	
     #----------------------------------------------------------------------
     def run(self):
-        print 'Called'
-	self.Hit=Hit.main(self.IO,self.XSetup,self.HFParams, True)
+        self.Hit=Hit.main(self.IO,self.XSetup,self.HFParams, True)
 
 
 class RightPanel(wx.Panel):
@@ -526,13 +542,16 @@ class RightPanel(wx.Panel):
 	wx.Panel.__init__(self, parent, id=wx.ID_ANY)
 	self.mainframe=parent
 	self.path=cwd
-	self.cmap_list=['Accent', 'Dark2', 'hsv', 'Paired', 'Pastel1',
-                        'Pastel2', 'Set1', 'Set2', 'Set3', 'spectral',
-                        'gist_earth', 'gist_ncar', 'gist_rainbow',
-                        'gist_stern', 'jet', 'brg', 'CMRmap', 'cubehelix',
-                        'gnuplot', 'gnuplot2', 'ocean', 'rainbow',
-                        'terrain', 'Blues','Reds']
+	self.cmap_list=['spectral',
+                        'gist_ncar',
+                        'gist_stern',
+			'jet',
+			'cubehelix',
+                        'terrain',
+			'Blues',
+			'Reds']
 	pub.subscribe(self.OnProgress,'Progress')
+	self.root=NPCVar()
 	self.CreateMainPanel()
 	
 	
@@ -570,6 +589,7 @@ class RightPanel(wx.Panel):
 	SliderStatic.SetFont(font1)
 	self.sld_min=wx.Slider(self,-1,0,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermin.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_slidermin.AddSpacer(25)
 	sizer_slidermin.Add(self.sld_min,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_slidermax=wx.BoxSizer(wx.HORIZONTAL)
@@ -577,6 +597,7 @@ class RightPanel(wx.Panel):
 	SliderStaticMax.SetFont(font1)
 	self.sld_max=wx.Slider(self,-1,20,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermax.Add(SliderStaticMax,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_slidermax.AddSpacer(25)
 	sizer_slidermax.Add(self.sld_max,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_cmap=wx.BoxSizer(wx.HORIZONTAL)
@@ -589,6 +610,14 @@ class RightPanel(wx.Panel):
 	sizer_cmap.AddSpacer(10)
 	sizer_cmap.Add(self.cmap,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL,1)
 	
+	sizer_show_peaks=wx.BoxSizer(wx.HORIZONTAL)
+	self.ShowBragg=wx.CheckBox(self,-1)
+	
+	PeakStatic=wx.StaticText(self,-1,'Show Bragg Peaks')
+	PeakStatic.SetFont(font1)
+	sizer_show_peaks.Add(self.ShowBragg)
+	sizer_show_peaks.Add(PeakStatic)
+	
 	sizer_v2 =  wx.StaticBoxSizer(SliderBox, wx.VERTICAL)
 	sizer_v2.AddSpacer(8)
 	sizer_v2.Add(sizer_sliderboost,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
@@ -598,6 +627,8 @@ class RightPanel(wx.Panel):
 	sizer_v2.Add(sizer_slidermax,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_v2.AddSpacer(8)
 	sizer_v2.Add(sizer_cmap,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_v2.AddSpacer(8)
+	sizer_v2.Add(sizer_show_peaks,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 
 	
 	filebox = wx.StaticBox(self, proportion, "Progreesion and results", size=(100,300))
@@ -630,13 +661,19 @@ class RightPanel(wx.Panel):
 	
 	
 	sizer_movie=wx.BoxSizer(wx.HORIZONTAL)
-	self.Play=wx.Button(self,-1,"Play",size=(75,-1))
-	self.Play.SetFont(font1)
-	self.Stop=wx.Button(self,-1,"Stop",size=(75,-1))
-	self.Stop.SetFont(font1)
-	sizer_movie.Add(self.Play,proportion, border =2,flag=flags_L)
+	img = wx.Bitmap(os.path.join(self.root,"bitmaps", "player_play.png"))
+        self.playPauseBtn = buttons.GenBitmapToggleButton(self, bitmap=img, name="play")
+        self.playPauseBtn.Enable(True)
+        
+        img = wx.Bitmap(os.path.join(self.root,"bitmaps", "player_pause.png"))
+        self.playPauseBtn.SetBitmapSelected(img)
+        self.playPauseBtn.SetInitialSize()
+	
+	self.FindBraggs=wx.Button(self,-1,"Find Braggs",size=(100,30))
+	self.FindBraggs.SetFont(font1)
+	sizer_movie.Add(self.playPauseBtn,proportion, border =2,flag=flags_L)
 	sizer_movie.AddSpacer(5)
-	sizer_movie.Add(self.Stop,proportion, border =4,flag=flags_L)
+	sizer_movie.Add(self.FindBraggs,proportion, border =4,flag=flags_L)
 	sizer_movie.AddSpacer(5)
 	
 	sizer_v1 =  wx.StaticBoxSizer(filebox, wx.VERTICAL)
@@ -695,6 +732,9 @@ class PlotStats(wx.Panel):
         self.CreateMainPanel()
         pub.subscribe(self.DisplayHit,'Hit')
 	
+	self.peaks=None
+	self.Bragg=False
+	
     #----------------------------------------------------------------------
     def CreateMainPanel(self):
         """ Creates the main panel with all the subplots:
@@ -717,16 +757,32 @@ class PlotStats(wx.Panel):
         
 	self.SetSizer(self.vbox1)
         self.vbox1.Fit(self)
-        cid = self.figure.canvas.mpl_connect('motion_notify_event', self.onclick)   
-        #cid2 = self.figure.canvas.mpl_connect('right_click', self.onclick)   
+        cid = self.figure.canvas.mpl_connect('motion_notify_event', self.onmove)   
+        cid2 = self.figure.canvas.mpl_connect('button_press_event', self.onclick)   
 	self.canvas.draw()
 	
     def onclick(self,event):
+      if event.xdata != None and event.ydata != None and event.button == 3:
+        x=event.xdata
+	y=event.ydata
+	s=''
+	try:
+	  for i in range(0,20):
+	    s=s+'\n'+''.join(['%5i' %member for member in self.dset[y-10:y+9,x-10+i] ]) 
+	  if not hasattr(self, 'w'):
+	    self.w=ShowNumbers(self,-1,s)
+	    self.w.Show(True)
+	  
+	  else: self.w.text.SetLabel(s)
+	  		
+        except:pass
+    
+    
+    def onmove(self,event):
       
       if event.xdata != None and event.ydata != None:
         try:
 	  
-	  #print (int(event.xdata+0.5), int(event.ydata+0.5), self.dset[int(event.ydata+0.5),int(event.xdata+0.5)])
 	  self.toolbar.Stat.SetLabel("\tx:%4i\ty:%4i\t\tIntensity:%6i" %(int(event.xdata+0.5), int(event.ydata+0.5), self.dset[int(event.ydata+0.5),int(event.xdata+0.5)]))
 	  self.canvas.draw()
         except: pass
@@ -739,23 +795,35 @@ class PlotStats(wx.Panel):
 	wx.CallAfter(self.OpenH5,filename,peaks)
     
     #----------------------------------------------------------------------
-    def display_peaks(self, axes,peaks,color='y',radius=5,thickness=0):
-      for peak in peaks:
-       circle=Circle((peak[0],peak[1]),radius,color=color,fill=False)
-       circle.set_gid("circle")
-       axes.add_artist(circle)
+    def display_peaks(self, axes,peaks,Bragg,color='y',radius=5,thickness=0):
+      
+       for peak in peaks:
+        circle=Circle((peak[0],peak[1]),radius,color=color,fill=False)
+        circle.set_gid("circle")
+        axes.add_artist(circle)
     
-    def OpenH5(self,filename,peaks=None):
-        
-	# Remove circle from fig
-	artists=self.axes.findobj()
-	for artist in artists:
+    
+    def clean_peaks(self):
+        # Remove circle from fig
+        artists=self.axes.findobj()
+        for artist in artists:
 	   try:
 	     if artist.get_gid() == "circle": 
 	       artist.remove() 
-	   except: pass
+	   except: pass#Open h5 file and
+	
+    def FindBraggs(self,threshold):
+        data=self.dset
+        peaks1=pf.find_local_max(data[0:1023,0:1004].astype(np.float),d_rad=1,threshold=threshold)
+	peaks=pf.subpixel_centroid(data[0:1023,0:1004].astype(np.float),peaks1,2)[0]
+	peakslist=[]		    
+	for i in range(0,peaks.shape[1]): peakslist.append([peaks[0][i],peaks[1][i],data[peaks[1][i],peaks[0][i]]])
+	self.peaks=np.array(peakslist)
+	self.clean_peaks()
+	self.display_peaks(self.axes,self.peaks,self.Bragg)
+	self.canvas.draw()
+    def OpenH5(self,filename,peaks=None):
         
-	#Open h5 file and
 	#Should pass the data along, not the file !!
 	f=h5py.File(filename,'r')
 	if self.dset== []:
@@ -766,12 +834,22 @@ class PlotStats(wx.Panel):
 	   self.dset=f[f.keys()[0]][:]
 	   new_dset=self.dset*self.boost
 	   self.frame.set_data(new_dset)
-	try:peaks=f['processing/hitfinder/peakinfo'][:]
-	except: peaks=None
+	
+	#is there peaks in the h5file?
+	try:self.peaks=f['processing/hitfinder/peakinfo'][:]
+	except: self.peaks=None
 	f.close()
-	if peaks != None: self.display_peaks(self.axes,peaks)
+	self.clean_peaks()
+	if self.peaks != None and self.Bragg: self.display_peaks(self.axes,self.peaks,self.Bragg)
 	self.canvas.draw()
 
+    
+    #----------------------------------------------------------------------
+    def SetBragg(self,Bragg):
+        self.Bragg=Bragg
+	if self.peaks != None and self.Bragg == True: self.display_peaks(self.axes,self.peaks,self.Bragg)
+	if self.Bragg == False: self.clean_peaks()
+	self.canvas.draw()
     #----------------------------------------------------------------------
     def UpdateMin(self,boost,mini,maxi):
         vmin=mini*np.sqrt(boost)
@@ -831,9 +909,19 @@ class PlayThread(Thread):
 		self.panel1.filelist.EnsureVisible(min(i+7,len(self.fname_list)-1))
 		
 	    else: break
-        self.panel1.Play.Enable()
+        #self.panel1.Play.Enable()
+	self.panel1.playPauseBtn.SetValue(False)
     
-	
+class ShowNumbers(wx.Frame):
+
+    def __init__(self,parent,id,s):
+        font=wx.Font(11,wx.TELETYPE, wx.NORMAL, wx.NORMAL, False,'Courier New')
+	wx.Frame.__init__(self, parent, id, 'Intensities', size=(680,370),style=wx.DEFAULT_FRAME_STYLE ^ wx.RESIZE_BORDER)
+        #wx.Frame.CenterOnScreen(self)	
+	panel = wx.Panel(self, -1)
+        self.text=wx.StaticText(panel, -1, s, (10, 10))
+	self.text.SetFont(font)
+        
 class MainFrame(wx.Frame):
     
     #Also Acts as the Controller here
@@ -859,29 +947,47 @@ class MainFrame(wx.Frame):
 	self.panel1.sld_min.Bind(wx.EVT_SLIDER, self.Min)
 	self.panel1.sld_max.Bind(wx.EVT_SLIDER, self.Max)
 	self.panel1.filelist.Bind(wx.EVT_LISTBOX, self.OnSelect)
-        self.panel1.Play.Bind(wx.EVT_BUTTON, self.OnPlay)
-        self.panel1.Stop.Bind(wx.EVT_BUTTON, self.OnStop)
+        #self.panel1.Play.Bind(wx.EVT_BUTTON, self.OnPlay)
+	self.panel1.FindBraggs.Bind(wx.EVT_BUTTON, self.OnFindBragg)
+        self.panel1.playPauseBtn.Bind(wx.EVT_BUTTON,self.OnPlay)
+	#self.panel1.Stop.Bind(wx.EVT_BUTTON, self.OnStop)
 	self.panel1.cmap.Bind(wx.EVT_CHOICE,self.OnCmap)
+	self.panel1.ShowBragg.Bind(wx.EVT_CHECKBOX,self.OnBragg)
 	self.SetSizerAndFit(self.MainSizer)
 	self.Centre()
 	self.Show()
 
+    
+    
+    #----------------------------------------------------------------------
+    def OnFindBragg(self,e):
+        th=float(self.left.Thresh.GetValue())
+	self.panel.FindBraggs(th)
+    
+    #----------------------------------------------------------------------
+    def OnBragg(self,e):
+        ShowBragg=self.panel1.ShowBragg.GetValue()
+	self.panel.SetBragg(ShowBragg)
+    
     #----------------------------------------------------------------------
     def OnCmap(self,e):
         cmap=self.panel1.cmap.GetStringSelection()
 	self.panel.SetCmap(cmap)
 	
     #----------------------------------------------------------------------
-    def OnStop(self,e):
+    def OnStop(self):
         try : 
 	    self.t.signal=False
-	    self.panel1.Play.Enable()
+	    #self.panel1.Play.Enable()
 	except: return
 	
     #----------------------------------------------------------------------
     def OnPlay(self,e):
+        if not e.GetIsDown():
+            self.OnStop()
+            return
+        
         index=self.panel1.filelist.GetSelection()
-	self.panel1.Play.Disable()
 	self.t=PlayThread(self.panel,self.panel1,self.panel1.fname_list,index)
        
     #----------------------------------------------------------------------
