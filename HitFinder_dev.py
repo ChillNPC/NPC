@@ -58,11 +58,10 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			
 			if HFParams.DoPeakSearch:
 			    
-			    peaks=pf.find_local_max(working[0:1023,0:1004].astype(np.float),d_rad=1,threshold=HFParams.threshold)
+			    local_max=pf.find_local_max(working[0:1023,0:1004].astype(np.float),d_rad=1,threshold=HFParams.threshold)
+			    peakslist=np.array(pf.subpixel_centroid(working[0:1023,0:1004],local_max,3))
+	
 			    
-			    for i in range(0,peaks.shape[1]): peakslist.append([peaks[0][i],peaks[1][i],working[peaks[1][i],peaks[0][i]]])
-			    peakslist=np.array(peakslist)
-			
 			if IO.edf:
 			    OutputFileName =os.path.join(IO.procdir, IO.EDFDir,"%s.edf" %root)
 			    img.data = working
