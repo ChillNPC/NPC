@@ -20,9 +20,62 @@ import numpy as np
 import numpy.random as npr
 #import numba
 from scipy import ndimage
-
+from scipy.spatial import KDTree
 import itertools
 
+
+def local_maxima(image, radius, separation, percentile=64):
+    """Find local maxima whose brightness is above a given percentile."""
+
+    ndim = image.ndim
+    # Compute a threshold based on percentile.
+    not_black = image[np.nonzero(image)]
+    if len(not_black) == 0:
+        warnings.warn("Image is completely black.", UserWarning)
+        return np.empty((0, ndim))
+    threshold = stats.scoreatpercentile(not_black, percentile)
+
+    # The intersection of the image with its dilation gives local maxima.
+    if not np.issubdtype(image.dtype, np.integer):
+        raise TypeError("Perform dilation on exact (i.e., integer) data.")
+    #footprint = binary_mask(radius, ndim, separation)
+    s = ndimage.generate_binary_structure(ndim, 2)
+    # scale it up to the desired size
+    footprint = ndimage.iterate_structure(s, int(d_rad))
+    
+    dilation = ndimage.grey_dilation(image, footprint=footprint,
+                                     mode='constant')
+    maxima = np.vstack(np.where((image == dilation) & (image > threshold))).T
+    if not np.size(maxima) > 0:
+        warnings.warn("Image contains no local maxima.", UserWarning)
+        return np.empty((0, ndim))
+
+    # Flat peaks return multiple nearby maxima. Eliminate duplicates.
+    while True:
+        duplicates = cKDTree(maxima, 30).query_pairs(separation)
+        if len(duplicates) == 0:
+            break
+        to_drop = []
+        for pair in duplicates:
+            # Take the average position.
+            # This is just a starting point, so we won't go into subpx precision here.
+            merged = maxima[pair[0]]
+            merged = maxima[[pair[0], pair[1]]].mean(0).astype(int)
+            maxima[pair[0]] = merged  # overwrite one
+            to_drop.append(pair[1])  # queue other to be dropped
+        maxima = np.delete(maxima, to_drop, 0)
+
+    # Do not accept peaks near the edges.
+    shape = np.array(image.shape)
+    margin = int(separation) // 2
+    near_edge = np.any((maxima < margin) | (maxima > (shape - margin)), 1)
+    maxima = maxima[~near_edge]
+    if not np.size(maxima) > 0:
+        warnings.warn("All local maxima were in the margins.", UserWarning)
+
+    # Return coords in as a numpy array shaped so it can be passed directly
+    # to the DataFrame constructor.
+    return maxima 
 
 def find_local_max(img, d_rad, threshold=1e-15, inplace=False):
     """
@@ -59,11 +112,28 @@ def find_local_max(img, d_rad, threshold=1e-15, inplace=False):
 
     # find the locations that are the local maximum
     # TODO clean this up
-    local_max = np.where(np.exp(img - dilated_img) > (1 - 1e-15))
+    
+    maxima = np.vstack(np.where(np.exp(img - dilated_img) > (1 - 1e-15))).T
+    count=0
+    while True:
+        duplicates = KDTree(maxima, 30).query_pairs(d_rad)
+        if len(duplicates) == 0:
+            break
+        count += len(duplicates)
+	to_drop = []
+        for pair in duplicates:
+           # Take the average position.
+           # This is just a starting point, so we won't go into subpx precision here.
+            merged = maxima[pair[0]]
+            merged = maxima[[pair[0], pair[1]]].mean(0).astype(int)
+            maxima[pair[0]] = merged  # overwrite one
+            to_drop.append(pair[1])  # queue other to be dropped
+        maxima = np.delete(maxima, to_drop, 0)
     # the extra [::-1] is because matplotlib and ndimage disagree an xy vs yx.
     # Finally, there should be nothing within 'd_rad' of the edges of the image
-    return np.vstack(local_max[::-1])
-
+    print '%i peaks were removed' %count
+    return np.vstack(maxima).T[::-1]
+    
 #@numba.autojit
 def _refine_centroids_loop(img, local_maxes, mask_rad, offset_masks, d_struct, r2_mask):
     results = np.zeros((4, local_maxes.shape[1]), dtype=np.float32)
@@ -146,10 +216,17 @@ def subpixel_centroid(img, local_maxes, mask_rad, struct_shape='circle'):
     r2_mask = np.sqrt(r2_mask).astype(float)
     results = _refine_centroids_loop(img, local_maxes, mask_rad, offset_masks, d_struct, r2_mask)
     pos = (results[0:2,:] + local_maxes)[::-1,:]
-    m = results[2,:]
-    r2 = results[3,:]
-    return pos, m, r2
-
+    #m = results[2,:]
+    #r2 = results[3,:]
+    #return pos, m, r2
+    peaks=[]
+    for i in range(0,pos.shape[1]):
+        x = pos[0][i]
+	y = pos[1][i]
+        peaks.append([x, y, img[y,x]])
+    return peaks
+    
+    
 def subpixel_centroid_nd(img, local_maxes, mask_rad):
     '''
     This is effectively a replacement for cntrd in the matlab/IDL code.
