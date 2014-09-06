@@ -1,5 +1,5 @@
 #!/Library/Frameworks/Python.framework/Versions/Current/bin/python
-import wx, os,glob
+import wx, os, glob, sys
 import imp
 try:
    from wx.lib.pubsub import pub
@@ -12,12 +12,15 @@ from matplotlib.patches import Circle
 from matplotlib.figure import Figure
 import matplotlib.font_manager as fm
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas, NavigationToolbar2WxAgg as NavigationToolbar
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter, MaxNLocator
 from threading import Thread
 import NanoPeakCell_dev as Hit
 import wx.lib.buttons as buttons
 import fabio, pyFAI, pyFAI.distortion, pyFAI.detectors
 import peakfind as pf
+import mynormalize
+import matplotlib.pyplot as plt
+import matplotlib
 try : 
     imp.find_module('h5py')
     H5=True
@@ -98,7 +101,7 @@ class HitView(wx.Panel):
     """
     """
     #----------------------------------------------------------------------
-    def __init__(self, parent):
+    def __init__(self, parent,log):
 	wx.Panel.__init__(self, parent, id=wx.ID_ANY)
 	self.mainframe=parent
 	self.CreateMainPanel()
@@ -538,22 +541,24 @@ class RightPanel(wx.Panel):
     """
     """
     #----------------------------------------------------------------------
-    def __init__(self, parent):
+    def __init__(self, parent,log):
 	wx.Panel.__init__(self, parent, id=wx.ID_ANY)
 	self.mainframe=parent
 	self.path=cwd
-	self.cmap_list=['spectral',
-                        'gist_ncar',
-                        'gist_stern',
-			'jet',
-			'cubehelix',
-                        'terrain',
+	self.log = log
+	self.cmap_list=['hot',
+                        'gray',
+                        'YlorBr_r',
+			'YlGnBu_r',
 			'Blues',
-			'Reds']
+                        'Reds',
+			'Blues_r',
+			'Reds_r']
+	self.frame=self.mainframe.panel.frame
 	pub.subscribe(self.OnProgress,'Progress')
 	self.root=NPCVar()
 	self.CreateMainPanel()
-	
+	pub.subscribe(self.UpdateSpin,'Update Spins')
 	
 	
 	
@@ -579,33 +584,38 @@ class RightPanel(wx.Panel):
 	sizer_sliderboost=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStatic=wx.StaticText(self,-1,"Intensity Boost")
 	SliderStatic.SetFont(font1)
-	self.sld_boost=wx.Slider(self,-1,1,1,100,wx.DefaultPosition,(100, 10),wx.SL_HORIZONTAL | wx.SL_LABELS)
-	self.sld_boost.SetFont(font1)
+	#self.sld_boost=wx.Slider(self,-1,1,1,100,wx.DefaultPosition,(100, 10),wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.boost=wx.SpinCtrl(self,-1,'1',wx.DefaultPosition,(70,-1))
+	self.boost.SetFont(font1)
+	self.boost.SetValue(1)
 	sizer_sliderboost.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
-	sizer_sliderboost.Add(self.sld_boost,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_sliderboost.Add(self.boost,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_slidermin=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStatic=wx.StaticText(self,-1,"Min Value")
 	SliderStatic.SetFont(font1)
-	self.sld_min=wx.Slider(self,-1,0,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.min=wx.SpinCtrl(self,-1,'1',wx.DefaultPosition,(70,-1))
+	self.min.SetValue(1)
+	#wx.Slider(self,-1,0,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
 	sizer_slidermin.Add(SliderStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermin.AddSpacer(25)
-	sizer_slidermin.Add(self.sld_min,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_slidermin.Add(self.min,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_slidermax=wx.BoxSizer(wx.HORIZONTAL)
 	SliderStaticMax=wx.StaticText(self,-1,"Max Value")
 	SliderStaticMax.SetFont(font1)
-	self.sld_max=wx.Slider(self,-1,20,0,50,wx.DefaultPosition, (250, 20), wx.SL_HORIZONTAL | wx.SL_LABELS)
+	self.max=wx.SpinCtrl(self,-1,'1',wx.DefaultPosition,(70,-1))
+	self.max.SetValue(10)
 	sizer_slidermax.Add(SliderStaticMax,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_slidermax.AddSpacer(25)
-	sizer_slidermax.Add(self.sld_max,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
+	sizer_slidermax.Add(self.max,1, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	
 	sizer_cmap=wx.BoxSizer(wx.HORIZONTAL)
 	CmapStatic=wx.StaticText(self,-1,"Colour Mapping:")
 	self.cmap=wx.Choice(self,-1,choices=self.cmap_list)
 	CmapStatic.SetFont(font1)
 	self.cmap.SetFont(font1)
-	self.cmap.SetStringSelection('gnuplot')
+	self.cmap.SetStringSelection('Blues')
 	sizer_cmap.Add(CmapStatic,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL,1)
 	sizer_cmap.AddSpacer(10)
 	sizer_cmap.Add(self.cmap,0, wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL,1)
@@ -615,8 +625,28 @@ class RightPanel(wx.Panel):
 	
 	PeakStatic=wx.StaticText(self,-1,'Show Bragg Peaks')
 	PeakStatic.SetFont(font1)
+	
 	sizer_show_peaks.Add(self.ShowBragg)
 	sizer_show_peaks.Add(PeakStatic)
+	
+	self.figure = Figure((3, 0.8), dpi=100,facecolor='white')
+	self.canvas = FigCanvas(self, -1, self.figure)
+        self.axes=self.figure.add_axes([0.10, 0.30, 0.8, 0.5])
+	self.axes.xaxis.label.set_size(10)
+	self.figure.subplots_adjust(left=0,right=1,top=1,bottom=0)
+	self.axes.tick_params(axis='both',which='major',labelsize=9)
+	self.axes.get_xaxis().set_major_locator(MaxNLocator(integer=True))
+	
+	self.cbar0 = matplotlib.colorbar.ColorbarBase(self.axes, format="%3i", cmap=matplotlib.cm.Blues,
+                                   norm=matplotlib.colors.Normalize(vmin=0, vmax=10),
+                                   orientation='horizontal')
+	self.cbar0.set_norm(mynormalize.MyNormalize(vmin=1,vmax=10,stretch='log'))
+	self.cbar0.locator=MaxNLocator(integer=True,nbins=8)
+        self.cbar = DraggableColorbar(self.cbar0,self.frame,self.boost)
+        self.cbar.connect()
+	self.cbar0.draw_all()
+	self.canvas.draw()
+
 	
 	sizer_v2 =  wx.StaticBoxSizer(SliderBox, wx.VERTICAL)
 	sizer_v2.AddSpacer(8)
@@ -628,8 +658,10 @@ class RightPanel(wx.Panel):
 	sizer_v2.AddSpacer(8)
 	sizer_v2.Add(sizer_cmap,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
 	sizer_v2.AddSpacer(8)
+	sizer_v2.Add(self.canvas,proportion,border =2,flag=wx.ALL | wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL)
+        sizer_v2.AddSpacer(8)
 	sizer_v2.Add(sizer_show_peaks,proportion,border =2,flag=wx.ALL | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL)
-
+	
 	
 	filebox = wx.StaticBox(self, proportion, "Progreesion and results", size=(100,300))
 	
@@ -698,6 +730,30 @@ class RightPanel(wx.Panel):
 	
 	self.Bind(wx.EVT_BUTTON, self.GetDir, self.Browse)
     
+    #----------------------------------------------------------------------
+    def UpdateSpin(self, mini,maxi):
+        self.min.SetValue(int(mini+0.5))
+	self.max.SetValue(int(maxi+0.5))
+    
+    #----------------------------------------------------------------------
+    def SetMax(self,Max):
+        self.cbar0.set_clim(vmax=Max)
+	self.cbar0.draw_all()
+	self.canvas.draw()
+    
+    #----------------------------------------------------------------------
+    def SetMin(self,Min):
+        self.cbar0.set_clim(vmin=Min)
+	self.cbar0.draw_all()
+	self.canvas.draw()
+    #----------------------------------------------------------------------
+    def SetCmap(self,cmap):
+        self.cbar0.set_cmap(cmap)
+	#self.cmap=cmap
+	self.cbar0.draw_all()
+	self.canvas.draw()
+    
+    #----------------------------------------------------------------------
     def GetDir(self, event):
        dlg = wx.DirDialog(self, "Choose a directory", style=1,defaultPath=self.path)
        if dlg.ShowModal() == wx.ID_OK:
@@ -706,10 +762,11 @@ class RightPanel(wx.Panel):
 		  self.UpdateFileList(self.path)
        dlg.Destroy()
        
+    #----------------------------------------------------------------------
     def UpdateFileList(self,path):
         self.fname_list = glob.glob("*.h5")
 	self.filelist.Set(self.fname_list)
-
+        self.log.WriteText("Found %i H5 files in directory %s\n" %(len(self.fname_list),path))
     
 class MyToolbar(NavigationToolbar):
    mess="\tx:    \ty:    \t\tIntensity:      "
@@ -721,15 +778,17 @@ class MyToolbar(NavigationToolbar):
 class PlotStats(wx.Panel):
     
     #----------------------------------------------------------------------
-    def __init__( self, parent,pos=wx.DefaultPosition,size=wx.DefaultSize):
+    def __init__( self, parent, log, pos=wx.DefaultPosition,size=wx.DefaultSize):
         wx.Panel.__init__(self,parent)
         self.parent=parent
+	self.log = log
 	self.prop = fm.FontProperties(size=10)
 	self.boost=1
 	self.vmin=0
-	self.vmax=20
-	self.cmap='gnuplot'
+	self.vmax=10
+	self.cmap='Blues'
         self.CreateMainPanel()
+	self.filename=''
         pub.subscribe(self.DisplayHit,'Hit')
 	
 	self.peaks=None
@@ -747,42 +806,40 @@ class PlotStats(wx.Panel):
 	self.axes.axis('off')
 	self.figure.subplots_adjust(left=0,right=1,top=1,bottom=0)
 	self.dset=[]
+	self.frame=self.axes.imshow(np.zeros((1024,1024)),vmin=0, vmax=100,cmap='Blues')
+	self.w=ShowNumbers(self,-1,'')
 	#self.toolbar = NavigationToolbar(self.canvas)
 	self.toolbar = MyToolbar(self.canvas)
+	 
 	
-	#self.figure.tight_layout()
 	self.vbox1 = wx.BoxSizer(wx.VERTICAL)
         self.vbox1.Add(self.canvas, 1, wx.LEFT | wx.TOP | wx.GROW | wx.EXPAND)
         self.vbox1.Add(self.toolbar, 0, wx.EXPAND)
-        
-	self.SetSizer(self.vbox1)
+        self.SetSizer(self.vbox1)
         self.vbox1.Fit(self)
         cid = self.figure.canvas.mpl_connect('motion_notify_event', self.onmove)   
         cid2 = self.figure.canvas.mpl_connect('button_press_event', self.onclick)   
 	self.canvas.draw()
 	
+    #----------------------------------------------------------------------
     def onclick(self,event):
-      if event.xdata != None and event.ydata != None and event.button == 3:
+      if event.xdata != None and event.ydata != None and event.button == 2:
         x=event.xdata
 	y=event.ydata
 	s=''
 	try:
 	  for i in range(0,20):
-	    s=s+'\n'+''.join(['%5i' %member for member in self.dset[y-10:y+9,x-10+i] ]) 
-	  if not hasattr(self, 'w'):
-	    self.w=ShowNumbers(self,-1,s)
-	    self.w.Show(True)
-	  
-	  else: self.w.text.SetLabel(s)
+	    s=s+'\n'+'' .join(['%5i' %member for member in self.dset[y-10:y+9,x-10+i] ]) 
+	  self.w.Show()
+	  self.w.text.SetLabel(s)
 	  		
         except:pass
     
     
+    #----------------------------------------------------------------------
     def onmove(self,event):
-      
       if event.xdata != None and event.ydata != None:
         try:
-	  
 	  self.toolbar.Stat.SetLabel("\tx:%4i\ty:%4i\t\tIntensity:%6i" %(int(event.xdata+0.5), int(event.ydata+0.5), self.dset[int(event.ydata+0.5),int(event.xdata+0.5)]))
 	  self.canvas.draw()
         except: pass
@@ -791,45 +848,54 @@ class PlotStats(wx.Panel):
     
     #----------------------------------------------------------------------
     def DisplayHit(self,filename,peaks):
-#        filename=message.data
 	wx.CallAfter(self.OpenH5,filename,peaks)
     
     #----------------------------------------------------------------------
     def display_peaks(self, axes,peaks,Bragg,color='y',radius=5,thickness=0):
       
        for peak in peaks:
-        circle=Circle((peak[0],peak[1]),radius,color=color,fill=False)
+        circle=Circle((peak[0],peak[1]),radius,color=color,fill=False,linewidth=1.5)
         circle.set_gid("circle")
         axes.add_artist(circle)
     
-    
+    #----------------------------------------------------------------------
     def clean_peaks(self):
-        # Remove circle from fig
+        """ Remove any circle around Bragg peaks
+	"""
         artists=self.axes.findobj()
         for artist in artists:
-	   try:
-	     if artist.get_gid() == "circle": 
-	       artist.remove() 
-	   except: pass#Open h5 file and
-	
+	     if artist.get_gid() == "circle": artist.remove() 
+	  
+    #----------------------------------------------------------------------
     def FindBraggs(self,threshold):
-        data=self.dset
-        peaks1=pf.find_local_max(data[0:1023,0:1004].astype(np.float),d_rad=1,threshold=threshold)
-	peaks=pf.subpixel_centroid(data[0:1023,0:1004].astype(np.float),peaks1,2)[0]
-	peakslist=[]		    
-	for i in range(0,peaks.shape[1]): peakslist.append([peaks[0][i],peaks[1][i],data[peaks[1][i],peaks[0][i]]])
-	self.peaks=np.array(peakslist)
+        """Find Position of Bragg peaks in the img
+	   and display it on screen
+	"""
+	data=self.dset[0:1023,0:1004].astype(np.float)
+        local_max=pf.find_local_max(data,d_rad=3,threshold=threshold)
+	self.peaks=np.array(pf.subpixel_centroid(data,local_max,3))
+	
 	self.clean_peaks()
 	self.display_peaks(self.axes,self.peaks,self.Bragg)
 	self.canvas.draw()
-    def OpenH5(self,filename,peaks=None):
-        
-	#Should pass the data along, not the file !!
-	f=h5py.File(filename,'r')
-	if self.dset== []:
-	   self.dset=f[f.keys()[0]][:]
-	   self.frame=self.axes.imshow(self.dset*self.boost,vmin=self.vmin*np.sqrt(self.boost), vmax=self.vmax*np.sqrt(self.boost),cmap=self.cmap)
 	
+	num_braggs=self.peaks.shape[0]
+        self.log.WriteText("Found %4i Bragg peaks in file %s (threshold of %i)\n" %(num_braggs,self.filename,threshold))
+    
+    
+    #----------------------------------------------------------------------
+    def OpenH5(self,filename,peaks=None):
+        self.filename=filename
+	#Should pass the data along, not the file !!
+	f=h5py.File(self.filename,'r')
+	#vmin=self.vmin*np.sqrt(self.boost)
+	#vmax=self.vmax*np.sqrt(self.boost)
+	if self.dset== []:
+	   self.dset=f['data'][:]
+	   self.frame.set_data(self.dset*self.boost)
+	   self.frame.set_clim(vmin=self.vmin*np.sqrt(self.boost), vmax=self.vmax*np.sqrt(self.boost))
+	   #,cmap=self.cmap)
+	   
 	else:
 	   self.dset=f[f.keys()[0]][:]
 	   new_dset=self.dset*self.boost
@@ -850,6 +916,7 @@ class PlotStats(wx.Panel):
 	if self.peaks != None and self.Bragg == True: self.display_peaks(self.axes,self.peaks,self.Bragg)
 	if self.Bragg == False: self.clean_peaks()
 	self.canvas.draw()
+    
     #----------------------------------------------------------------------
     def UpdateMin(self,boost,mini,maxi):
         vmin=mini*np.sqrt(boost)
@@ -916,12 +983,116 @@ class ShowNumbers(wx.Frame):
 
     def __init__(self,parent,id,s):
         font=wx.Font(11,wx.TELETYPE, wx.NORMAL, wx.NORMAL, False,'Courier New')
-	wx.Frame.__init__(self, parent, id, 'Intensities', size=(680,370),style=wx.DEFAULT_FRAME_STYLE ^ wx.RESIZE_BORDER)
-        #wx.Frame.CenterOnScreen(self)	
+	wx.Frame.__init__(self, 
+			  parent, 
+			  id, 
+			  'Intensities', 
+			  size=(680,370),
+			  style=wx.DEFAULT_FRAME_STYLE ^ wx.RESIZE_BORDER)
+        self.Show(False)	
 	panel = wx.Panel(self, -1)
         self.text=wx.StaticText(panel, -1, s, (10, 10))
 	self.text.SetFont(font)
         
+    
+        
+class RedirectText(object):
+    def __init__(self,aWxTextCtrl):
+        self.out=aWxTextCtrl
+
+    def write(self,string):
+        
+        self.out.WriteText(string)
+
+
+
+class DraggableColorbar(object):
+    def __init__(self, cbar, mappable,boost):
+        self.boost=boost
+        self.cbar = cbar
+        self.mappable = mappable
+        self.press = None
+        self.cycle = sorted([i for i in dir(plt.cm) if hasattr(getattr(plt.cm,i),'N')])
+	self.index = self.cycle.index(cbar.get_cmap().name)
+
+    def connect(self):
+        """connect to all the events we need"""
+        self.cidpress = self.cbar.patch.figure.canvas.mpl_connect(
+            'button_press_event', self.on_press)
+        self.cidrelease = self.cbar.patch.figure.canvas.mpl_connect(
+            'button_release_event', self.on_release)
+        self.cidmotion = self.cbar.patch.figure.canvas.mpl_connect(
+            'motion_notify_event', self.on_motion)
+        self.keypress = self.cbar.patch.figure.canvas.mpl_connect(
+            'key_press_event', self.key_press)
+
+    def on_press(self, event):
+        """on button press we will see if the mouse is over us and store some data"""
+        if event.inaxes != self.cbar.ax: return
+        self.press = event.x, event.y
+	
+    def key_press(self, event):
+        if event.key=='down':
+            self.index += 1
+        elif event.key=='up':
+            self.index -= 1
+        if self.index<0:
+            self.index = len(self.cycle)
+        elif self.index>=len(self.cycle):
+            self.index = 0
+        
+	cmap = self.cycle[self.index]
+        self.cbar.set_cmap(cmap)
+        self.cbar.draw_all()
+        self.mappable.set_cmap(cmap)
+	self.mappable.get_axes().set_title(cmap)
+	self.mappable.get_axes().get_figure().canvas.draw()
+        self.cbar.patch.figure.canvas.draw()
+    
+    def oncmap(self,cmap):
+        self.cbar.set_cmap(cmap)
+	self.cbar.draw_all()
+	self.cbar.patch.figure.canvas.draw()
+    
+    def on_motion(self, event):
+        'on motion we will move the rect if the mouse is over us'
+        if self.press is None: return
+        if event.inaxes != self.cbar.ax: return
+        xprev, yprev = self.press
+        dx = event.x - xprev
+        dy = event.y - yprev
+        self.press = event.x,event.y
+        #print 'x0=%f, xpress=%f, event.xdata=%f, dx=%f, x0+dx=%f'%(x0, xpress, event.xdata, dx, x0+dx)
+        scale = self.cbar.norm.vmax - self.cbar.norm.vmin
+        perc = 0.05
+        if event.button==1:
+            self.cbar.norm.vmin -= (perc*scale)*np.sign(dx)
+            self.cbar.norm.vmax -= (perc*scale)*np.sign(dx)
+        elif event.button==3:
+            self.cbar.norm.vmin -= (perc*scale)*np.sign(dx)
+            self.cbar.norm.vmax += (perc*scale)*np.sign(dx)
+        self.cbar.draw_all()
+	#temp_norm=self.cbar.norm
+	self.mappable.set_norm(self.cbar.norm)
+	#self.mappable.set_clim(vmin=mini,vmax=maxi)
+        self.cbar.patch.figure.canvas.draw()
+        self.mappable.get_axes().get_figure().canvas.draw()
+        
+
+    def on_release(self, event):
+        """on release we reset the press data"""
+        self.press = None
+        self.mappable.set_norm(self.cbar.norm)
+	pub.sendMessage('Update Spins',mini=self.cbar.norm.vmin,maxi=self.cbar.norm.vmax)
+        self.cbar.patch.figure.canvas.draw()
+        self.mappable.get_axes().get_figure().canvas.draw()
+        
+    def disconnect(self):
+        """disconnect all the stored connection ids"""
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidpress)
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidrelease)
+        self.cbar.patch.figure.canvas.mpl_disconnect(self.cidmotion)
+
 class MainFrame(wx.Frame):
     
     #Also Acts as the Controller here
@@ -934,18 +1105,34 @@ class MainFrame(wx.Frame):
                           size=(3000,1200))
 	font2=wx.Font(11,wx.MODERN, wx.NORMAL, wx.NORMAL, False,'MS Shell Dlg 2')
 	
-	self.panel=PlotStats(self)
-	self.panel1=RightPanel(self)
-	self.left=HitView(self)
+	self.log = wx.TextCtrl(self, wx.ID_ANY, size=(300,100),
+                          style = wx.TE_MULTILINE|wx.TE_READONLY|wx.HSCROLL)
+	
+	self.panel=PlotStats(self,self.log)
+	self.panel1=RightPanel(self,self.log)
+	self.left=HitView(self,self.log)
+	
 	self.MainSizer = wx.BoxSizer(wx.HORIZONTAL)
 	self.MainSizer.Add(self.left, 0, wx.EXPAND | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL , 5)
         self.MainSizer.Add(self.panel, 1, wx.EXPAND | wx.ALIGN_CENTER | wx.ALIGN_CENTER_VERTICAL , 5)
 	self.MainSizer.Add(self.panel1, 0, wx.EXPAND | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL , 5)
-
+        
+	self.sizer2=wx.BoxSizer(wx.VERTICAL)
+	self.statusbar=wx.StaticText(self,-1,'Log Messages')
+	self.statusbar.SetFont(font2)
+	self.sizer2.Add(self.MainSizer,1, wx.EXPAND | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL , 5)
+	self.sizer2.Add(self.statusbar,0,  wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL , 5)
+	
+	self.sizer2.Add(self.log, 0, wx.EXPAND | wx.ALIGN_LEFT | wx.ALIGN_CENTER_VERTICAL , 5)
+	
+	
+	#self.redir=RedirectText(self.log)
+	
+        #sys.stdout=redir
 	#Bindings
-	self.panel1.sld_boost.Bind(wx.EVT_SLIDER, self.Boost)
-	self.panel1.sld_min.Bind(wx.EVT_SLIDER, self.Min)
-	self.panel1.sld_max.Bind(wx.EVT_SLIDER, self.Max)
+	self.panel1.boost.Bind(wx.EVT_SPINCTRL, self.Boost)
+	self.panel1.min.Bind(wx.EVT_SPINCTRL, self.Min)
+	self.panel1.max.Bind(wx.EVT_SPINCTRL, self.Max)
 	self.panel1.filelist.Bind(wx.EVT_LISTBOX, self.OnSelect)
         #self.panel1.Play.Bind(wx.EVT_BUTTON, self.OnPlay)
 	self.panel1.FindBraggs.Bind(wx.EVT_BUTTON, self.OnFindBragg)
@@ -953,12 +1140,16 @@ class MainFrame(wx.Frame):
 	#self.panel1.Stop.Bind(wx.EVT_BUTTON, self.OnStop)
 	self.panel1.cmap.Bind(wx.EVT_CHOICE,self.OnCmap)
 	self.panel1.ShowBragg.Bind(wx.EVT_CHECKBOX,self.OnBragg)
-	self.SetSizerAndFit(self.MainSizer)
+	self.panel.w.Bind(wx.EVT_CLOSE,self.onExit)
+	self.SetSizerAndFit(self.sizer2)
 	self.Centre()
 	self.Show()
 
     
-    
+    #----------------------------------------------------------------------
+    def onExit(self,e):
+        self.panel.w.Hide()
+	
     #----------------------------------------------------------------------
     def OnFindBragg(self,e):
         th=float(self.left.Thresh.GetValue())
@@ -973,7 +1164,7 @@ class MainFrame(wx.Frame):
     def OnCmap(self,e):
         cmap=self.panel1.cmap.GetStringSelection()
 	self.panel.SetCmap(cmap)
-	
+	self.panel1.SetCmap(cmap)
     #----------------------------------------------------------------------
     def OnStop(self):
         try : 
@@ -998,23 +1189,25 @@ class MainFrame(wx.Frame):
 
     #----------------------------------------------------------------------
     def Min(self,e):
-        boost = self.panel1.sld_boost.GetValue()
-	mini = self.panel1.sld_min.GetValue()
-	maxi = self.panel1.sld_max.GetValue()
+        boost = self.panel1.boost.GetValue()
+	mini = self.panel1.min.GetValue()
+	maxi = self.panel1.max.GetValue()
 	self.panel.UpdateMin(boost,mini,maxi)
-
+        self.panel1.SetMin(mini)
     #----------------------------------------------------------------------
     def Max(self,e):
-        boost = self.panel1.sld_boost.GetValue()
-	mini = self.panel1.sld_min.GetValue()
-	maxi = self.panel1.sld_max.GetValue()
+        boost = self.panel1.boost.GetValue()
+	mini = self.panel1.min.GetValue()
+	maxi = self.panel1.max.GetValue()
 	self.panel.UpdateMax(boost,mini,maxi)
+	self.panel1.SetMax(maxi)
+	
 
     #----------------------------------------------------------------------
     def Boost(self,e):
-        boost = self.panel1.sld_boost.GetValue()
-	mini = self.panel1.sld_min.GetValue()
-	maxi = self.panel1.sld_max.GetValue()
+        boost = self.panel1.boost.GetValue()
+	mini = self.panel1.min.GetValue()
+	maxi = self.panel1.max.GetValue()
 	self.panel.UpdateBoost(boost,mini,maxi)
 
 class Logo(wx.SplashScreen):
