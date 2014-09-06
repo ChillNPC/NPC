@@ -458,7 +458,7 @@ class main():
 	                percent = (float(index)/(self.total))*100.
 			hitrate= (float(self.hit)/float(index+1))*100.
 			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
-	             	sys.stdout.flush()
+	             	#sys.stdout.out.ChangeValue('     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)))
 			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
 			
  		     	
@@ -468,7 +468,7 @@ class main():
 	  self.tasks.put(None)
         
 	
-	while index != self.total-1:
+	while index != self.total -1:
 	    if self.signal:
 	     try:
 	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
