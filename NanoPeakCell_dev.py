@@ -85,8 +85,8 @@ class AI():
 	self.distance=XSetup.distance/1000.
 	self.psx=Detector.pixel_size/1000.
 	self.psy=Detector.pixel_size/1000.
-	self.bcx=XSetup.beam_x*self.psx
-	self.bcy=XSetup.beam_y*self.psy
+	self.bcx=XSetup.beam_y*self.psx
+	self.bcy=XSetup.beam_x*self.psy
 	self.resolution=Detector.resolution
 	#self.sf=os.path.join(self.root,"FILES","distorsion_%i.spline"%self.resolution)
 	self.spline=os.path.join(self.root,"FILES","distorsion_%i.spline"%self.resolution[0])
@@ -105,6 +105,8 @@ class AI():
 					  wavelength=self.wl)
 	#We should remove the beam stop				  
 	self.mask=np.zeros(self.resolution,dtype=bool)
+	extend=15
+	#self.mask[XSetup.beam_y-extend:XSetup.beam_y+extend,XSetup.beam_x-extend:XSetup.beam_x+extend]=True
     def test(self):
 	    print "Distance (m): %s" %str(self.distance)
 	    print "Beam center X (m): %s" %str(self.bcx)
