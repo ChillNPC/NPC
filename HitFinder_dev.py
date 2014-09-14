@@ -36,12 +36,13 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 		img.data=DataCorr.apply_correction(img.data,HFParams.DoDarkCorr,HFParams.DoFlatCorr,HFParams.DoDist)
 			 
 		#Remove beam stop area (i.e = 0)
-		img.data[XSetup.beam_y-15:XSetup.beam_y+15,XSetup.beam_x-15:XSetup.beam_x+15]=0
+		extend=15
 			 
 		#BkgCorr with pyFAI Azimuthal Integrator
 		working=AI.ai.separate(img.data,npt_rad=1024, npt_azim=512, unit="2th_deg",percentile=50, mask=AI.mask,restore_mask=False)[0]
 		
 		imgmax,imgmin,imgmed = np.max(working), np.min(working), np.median(working)
+		working[XSetup.beam_y-extend:XSetup.beam_y+extend,XSetup.beam_x-extend:XSetup.beam_x+extend]=0
 			 
 		# Get number of peaks above threshold in the current frame
 		cropped=working[20:Frelon.resolution[1]-20,20:Frelon.resolution[1]-20]

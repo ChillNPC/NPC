@@ -1,6 +1,8 @@
 #!/Library/Frameworks/Python.framework/Versions/Current/bin/python
-import wx, os, glob, sys
-import imp
+
+#Relies on wx, matplotlib, scipy, numpy
+import wx 
+import os, glob, sys, imp
 try:
    from wx.lib.pubsub import pub
 except: from wx.lib.pubsub import pub
@@ -12,7 +14,7 @@ from matplotlib.patches import Circle
 from matplotlib.figure import Figure
 import matplotlib.font_manager as fm
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigCanvas, NavigationToolbar2WxAgg as NavigationToolbar
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter, MaxNLocator
+from matplotlib.ticker import MaxNLocator
 from threading import Thread
 import NanoPeakCell_dev as Hit
 import wx.lib.buttons as buttons
@@ -21,6 +23,9 @@ import peakfind as pf
 import mynormalize
 import matplotlib.pyplot as plt
 import matplotlib
+
+# These imports will make sure the user will only be able to select outputs its system can save
+# TODO: Warning: Please install or source blabla to be able to export images in X format
 try : 
     imp.find_module('h5py')
     H5=True
@@ -45,13 +50,17 @@ def NPCVar():
 
 
 class XSetup():
-
+    """ This class stores the exprimental parameters of the experiment.
+    """
     wavelength=0.832
     distance=100.626
     beam_x=521.9095
     beam_y=516.923
     
 class HFParams():
+    """This class stores the parameters used in the Hit Finding procedure
+       NB: Image correction should have their own class
+    """
     threshold=40
     DoBkgCorr=True
     DoDarkCorr=True
@@ -64,12 +73,13 @@ class HFParams():
     procs=1
 
 class IO():   
-    # This class instantiates all dirs and filenames
-    # Also creates background and filename list
+    """ This class instantiates all directoriess and filenames (input/output)
+        Also creates filename list
+    """
     def __init__(self):
       self.ext=".edf"
       self.root=None
-      self.bkg=[]
+      #self.bkg=[]
       self.datadir=None
       self.procdir=None
       self.pickle=True
@@ -83,18 +93,18 @@ class IO():
 	return glob.glob(s)
 	
     
-    def get_bkg(self):
-        
-	try:self.bkg=self.bkg.split(',')
-	except: self.bkg=self.bkg
-	for img in self.bkg:
+    #def get_bkg(self):
+    #    
+#	try:self.bkg=self.bkg.split(',')
+#	except: self.bkg=self.bkg
+#	for img in self.bkg:
 	   
 	   
-	   img=str(img)
-	   if len(img) <= 3:
-	       self.bname_list.append(self.root+'_%s'%img.zfill(4)+self.ext)
-	   else: self.bname_list.append(self.root+'_%s'%img+self.ext)
-	#return self.bname_list
+#	   img=str(img)
+#	   if len(img) <= 3:
+#	       self.bname_list.append(self.root+'_%s'%img.zfill(4)+self.ext)
+#	   else: self.bname_list.append(self.root+'_%s'%img+self.ext)
+#	#return self.bname_list
 	
 	
 class HitView(wx.Panel):
@@ -134,7 +144,7 @@ class HitView(wx.Panel):
 	sizer_dir.AddSpacer(5)
 	Dir=wx.StaticText(self,-1,"Directory   ")
 	Dir.SetFont(font1)
-	self.Dir=wx.TextCtrl(self,-1,"/Users/Nico/prog/NPC/img",size=(120,20))
+	self.Dir=wx.TextCtrl(self,-1,"/Users/Nico/",size=(120,20))
 	self.Dir.SetFont(font1)
 	self.Browse=wx.Button(self,-1,"Browse",size=(75,-1))
 	self.Browse.SetFont(font1)
@@ -149,7 +159,7 @@ class HitView(wx.Panel):
 	sizer_dset.AddSpacer(5)
 	Dset=wx.StaticText(self, -1,"Dataset    ")
 	Dset.SetFont(font1)
-	self.Dset=wx.TextCtrl(self,-1,"mem3",size=(120,20))
+	self.Dset=wx.TextCtrl(self,-1,"lys2_3",size=(120,20))
 	self.Dset.SetFont(font1)
 	sizer_dset.Add(Dset,proportion, border =2,flag=flags_L)
 	sizer_dset.AddSpacer(5)
@@ -201,7 +211,7 @@ class HitView(wx.Panel):
 	sizer_dist=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_dist.AddSpacer(5)
 	dist=wx.StaticText(self, -1,"Distance (mm) ")
-	self.dist=wx.TextCtrl(self,-1,"98.605",size=(50,20))
+	self.dist=wx.TextCtrl(self,-1,"100.5",size=(50,20))
 	self.dist.SetFont(font1)
 	dist.SetFont(font1)
 	sizer_dist.Add(dist,proportion, border =2,flag=flags_L)
@@ -212,7 +222,7 @@ class HitView(wx.Panel):
 	sizer_wl=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_wl.AddSpacer(5)
 	wl=wx.StaticText(self, -1,"Wavelength (A)")
-	self.wl=wx.TextCtrl(self,-1,"0.832",size=(50,20))
+	self.wl=wx.TextCtrl(self,-1,"0.954",size=(50,20))
 	self.wl.SetFont(font1)
 	wl.SetFont(font1)
 	sizer_wl.Add(wl,proportion, border =2,flag=flags_L)
@@ -224,11 +234,11 @@ class HitView(wx.Panel):
 	sizer_beamcenter.AddSpacer(5)
 	BCX=wx.StaticText(self, -1,"Beam Center   X")
 	BCX.SetFont(font1)
-	self.X=wx.TextCtrl(self,-1,"523",size=(50,20))
+	self.X=wx.TextCtrl(self,-1,"545",size=(50,20))
 	self.X.SetFont(font1)
 	BCY=wx.StaticText(self, -1," Y")
 	BCY.SetFont(font1)
-	self.Y=wx.TextCtrl(self,-1,"512",size=(50,20))
+	self.Y=wx.TextCtrl(self,-1,"503",size=(50,20))
 	self.Y.SetFont(font1)
 	sizer_beamcenter.Add(BCX,proportion, border =2,flag=flags_L)
 	sizer_beamcenter.AddSpacer(5)
@@ -257,7 +267,7 @@ class HitView(wx.Panel):
 	sizer_threshold.AddSpacer(5)
 	Thresh=wx.StaticText(self, -1,"Threshold:           ")
 	Thresh.SetFont(font1)
-	self.Thresh=wx.TextCtrl(self,-1,"10",size=(40,20))
+	self.Thresh=wx.TextCtrl(self,-1,"100",size=(40,20))
 	self.Thresh.SetFont(font1)
 	sizer_threshold.Add(Thresh,proportion, border =2,flag=flags_L)
 	sizer_threshold.AddSpacer(37)
@@ -279,7 +289,7 @@ class HitView(wx.Panel):
 	sizer_cpus=wx.BoxSizer(wx.HORIZONTAL)
 	sizer_cpus.AddSpacer(5)
 	cpus=wx.StaticText(self, -1,"Number of cpus to use: ")
-	self.cpus=wx.TextCtrl(self,-1,"6",size=(40,20))
+	self.cpus=wx.TextCtrl(self,-1,"2",size=(40,20))
 	cpus.SetFont(font1)
 	self.cpus.SetFont(font1)
 	sizer_cpus.Add(cpus,proportion, border =2,flag=flags_L)
