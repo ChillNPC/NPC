@@ -120,7 +120,7 @@ class Detector():
         self.name=''
 	self.pixel_size=0.1 #(mm)
 	self.overload=65535
-	self.resolution=(2048.2048)
+	self.resolution=(2048,2048)
 	self.binning=1
 	
     def set_resolution(self,img):

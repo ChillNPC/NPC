@@ -78,9 +78,10 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			    working[0:1023,1004:1023]=0
 			    OutputFile.create_dataset("data",data=working.astype(np.int32))
 			    if HFParams.DoPeakSearch:
-			     g1=OutputFile.create_group("processing")
-                             g2=g1.create_group("hitfinder")
-                             g2.create_dataset("peakinfo",data=peakslist.astype(np.int32))
+			     OutputFile.create_dataset("processing/hitfinder/peakinfo",data=peakslist.astype(np.int32))
+			     #g1=OutputFile.create_group("processing")
+                             #g2=g1.create_group("hitfinder")
+                             #g2.create_dataset("peakinfo",data=peakslist.astype(np.int32))
 			    OutputFile.close()
 				 
 			#if conversion to Pickle
