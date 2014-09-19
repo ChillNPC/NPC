@@ -60,7 +60,8 @@ def HitFinder(IO,XSetup,HFParams,Frelon,DataCorr,AI,index):
 			if HFParams.DoPeakSearch:
 			    
 			    local_max=pf.find_local_max(working[0:1023,0:1004].astype(np.float),d_rad=1,threshold=HFParams.threshold)
-			    peakslist=np.array(pf.subpixel_centroid(working[0:1023,0:1004],local_max,3))
+			    local_max_crop=pf.local_max_crop(working[0:1023,0:1004].astype(np.float), local_max, 3)
+			    peakslist=np.array(pf.subpixel_centroid(working[0:1023,0:1004],local_max_crop,3))
 	
 			    
 			if IO.edf:
