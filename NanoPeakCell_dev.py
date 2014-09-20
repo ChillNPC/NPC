@@ -11,16 +11,20 @@ from HitFinder_dev import HitFinder
 import sys, fabio, glob, numpy as np, h5py, time, math, shutil, os
 import optparse
 import pyFAI, pyFAI.distortion, pyFAI.detectors
-import matplotlib
-import matplotlib.mlab as mlab
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FixedLocator, FormatStrFormatter
+#import matplotlib
+#import matplotlib.mlab as mlab
+#from mpl_toolkits.mplot3d import Axes3D
+#from matplotlib import cm
+#from matplotlib.ticker import LinearLocator, FixedLocator, FormatStrFormatter
 from scipy.interpolate import Rbf
 import multiprocessing
 from scipy import ndimage
 import datetime
 from threading import Thread
+
+
+import warnings
+warnings.simplefilter("ignore")
 
 def NPCVar():
     import os
@@ -163,7 +167,7 @@ class HFParams():
     npixels=20
     nbkg=1
     bkg=1
-    procs=4
+    procs=8
 
 class IO():   
     # This class instantiates all dirs and filenames
@@ -259,39 +263,42 @@ class Projection():
 	
 class MProcess(multiprocessing.Process):
     
-    def __init__(self, task_queue,result_queue):
-        multiprocessing.Process.__init__(self)
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-	self.signal=True
-	pub.subscribe(self.OnStop,'StopThreads')
-	
+    def __init__(self, task_queue,result_queue, IO, XSetup,HFParams, Frelon, DataCorr, ai):
+      multiprocessing.Process.__init__(self)
+      self.task_queue = task_queue
+      self.result_queue = result_queue
+      self.IO=IO
+      self.XSetup=XSetup
+      self.HFParams=HFParams
+      self.Frelon=Frelon
+      self.DataCorr=DataCorr
+      self.ai=ai
+      self.signal=True
+      pub.subscribe(self.OnStop,'StopThreads')
+
     def run(self):
-        proc_name = self.name
-        while self.signal :
-	    #print self.signal
-            next_task = self.task_queue.get()
-	    if next_task is None:
-	        self.task_queue.task_done()
-                break
-            #result=next_task()
-	    self.result_queue.put(next_task)
-            self.task_queue.task_done()
-        return
+      proc_name = self.name
+      while self.signal :
+	  next_task = self.task_queue.get()
+	  if next_task is None:
+	      self.task_queue.task_done()
+	      break
+	  else: res=HitFinder(self.IO,self.XSetup,self.HFParams, self.Frelon,self.DataCorr, self.ai,next_task)
+	  self.result_queue.put(res)
+	  self.task_queue.task_done()
+      return
 
     def OnStop(self):
         try : 
-	    self.signal=False
-	except: return
-
-   
+	   self.signal=False
+        except: return
 
 	
 
 class main():
 
     def __init__(self,IO,XSetup,HFParams,doclean):
-	
+	self.t1=time.time()
         self.signal=True
 	self.IO=IO
 	self.XSetup=XSetup
@@ -383,7 +390,8 @@ class main():
 	self.tasks = multiprocessing.JoinableQueue()
 	self.results= multiprocessing.Queue()
 	
-	self.consumers = [ MProcess(self.tasks,self.results) for i in xrange(self.HFParams.procs) ]
+	self.consumers = [ MProcess(self.tasks,self.results,self.IO,self.XSetup,self.HFParams,self.Frelon,self.DataCorr,self.ai) for i in xrange(self.HFParams.procs) ]
+	print len(self.consumers)
 	for w in self.consumers:
           w.start()
      
@@ -442,68 +450,77 @@ class main():
 	self.hit=0
 	self.nbfile=0
 	self.peaks_all_frame=[]
+	index=0
 	for fname in self.IO.fname_list:
 	  if self.signal:
-		self.tasks.put(HitFinder(self.IO,self.XSetup,self.HFParams,self.Frelon,self.DataCorr,self.ai,self.nbfile))
+		#self.tasks.put(HitFinder(self.IO,self.XSetup,self.HFParams,self.Frelon,self.DataCorr,self.ai,self.nbfile))
+		self.tasks.put(self.nbfile)
 		self.nbfile +=1
-		    
-		while True:
-		     try:
-	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
-			self.hit = self.hit + hit
-			if hit == 1: 
-			    
-			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
-			    pub.sendMessage('Hit',filename=OutputFileName,peaks=peaks)
-			
-		     	self.peaks_all_frame.append([len(peaks),fname])
-	                percent = (float(index)/(self.total))*100.
-			hitrate= (float(self.hit)/float(index+1))*100.
-			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
-	             	#sys.stdout.out.ChangeValue('     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)))
-			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
+		
+		if self.total / 10 == self.nbfile:
+		   	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get()   
+	  		self.hit += hit
+			percent = (float(index)/(self.total))*100.
+	  		hitrate= (float(self.hit)/float(index+1))*100.
+	  		print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),#while True:
+	  		sys.stdout.flush()
+		
+		#	    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
+		#	    pub.sendMessage('Hit',filename=OutputFileName,peaks=peaks)
+		#	
+		#     	self.peaks_all_frame.append([len(peaks),fname])
+	        #	pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
 			
  		     	
-		     except: break
+		#except: break
 	  else:break	
-	for i in xrange(self.HFParams.procs):
+	for i in xrange(self.HFParams.procs+1):
 	  self.tasks.put(None)
-        
+        while True:
+	  hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get()   
+	  self.hit += hit
+	  percent = (float(index)/(self.total))*100.
+	  hitrate= (float(self.hit)/float(index+1))*100.
+	  if index % 10 == 1: print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d  (%i out of %i images) \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks), index, self.total),#while True:
+	  sys.stdout.flush()
+	  if index == self.total -1 : 
+	    break
 	
-	while index != self.total -1:
-	    if self.signal:
-	     try:
-	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
-			self.hit = self.hit + hit
-			if hit == 1: 
-			    
-			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
-			    pub.sendMessage('Hit',filename=OutputFileName)
-			
-		     	self.peaks_all_frame.append([len(peaks),fname])
-	                percent = (float(index)/(self.total))*100.
-			hitrate= (float(self.hit)/float(index+1))*100.
-			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
-	             	sys.stdout.flush()
-			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
-			
- 		     	
-	     except: pass
-		     
-	    else: break    
+	
+#while index != self.total -1:
+#	    if self.signal:
+#	     try:
+#	             	hit, imgmax, imgmin, imgmed, index,  peaks, fname, working = self.results.get(block=True, timeout=0.1)
+#			self.hit = self.hit + hit
+#			if hit == 1: 
+#			    
+#			    OutputFileName =os.path.join(self.IO.procdir,self.IO.H5Dir, os.path.splitext(str(fname))[0]+".h5")
+#			    pub.sendMessage('Hit',filename=OutputFileName)
+#			
+#		     	self.peaks_all_frame.append([len(peaks),fname])
+#	                percent = (float(index)/(self.total))*100.
+#			hitrate= (float(self.hit)/float(index+1))*100.
+#			print '     %6.2f %%       %5.1f %%    %8.2f    %7.2f  %6.2f %4d   \r'%(percent,hitrate,imgmax,imgmin,imgmed,len(peaks)),
+#	             	sys.stdout.flush()
+#			pub.sendMessage('Progress',percent=percent, hitrate=hitrate)
+#			
+# 		     	
+#	     except: pass
+#		     
+#	    else: break    
 	#print 'Job progression... %5.1f %% --- Current hit-rate... %5.1f %% \r'%((float(res[6])/(total))*100.,((float(hit)/(total))*100.)),    		
 	#sys.stdout.flush()
-	self.tasks.join()
 	
 	
-	self.peaks_all_frame_sorted=sorted(self.peaks_all_frame, key=lambda x:x[0], reverse=True)
-	best=open(self.IO.procdir+"/best.lst","w")
-	for i in range(0,500):
-	   try: print >> best, 'HDF5'+self.peaks_all_frame_sorted[i][1]+'.h5'	    
-	   
-	   except IndexError: break
-	   
-	   else: pass
+	
+	#self.peaks_all_frame_sorted=sorted(self.peaks_all_frame, key=lambda x:x[0], reverse=True)
+	#best=open(self.IO.procdir+"/best.lst","w")
+	#for i in range(0,500):
+	#   try: print >> best, 'HDF5'+self.peaks_all_frame_sorted[i][1]+'.h5'	    
+	#   
+	#   except IndexError: break
+	#   
+	#   else: pass
 	
 				
 	#Move the different files into the MAX folder
@@ -516,6 +533,8 @@ class main():
 	print 'Overall, found %s hits in %s files --> %5.1f %% hit rate with a threshold of %s'%(self.hit,self.total,((float(self.hit)/(self.total))*100.),self.HFParams.threshold)
 	print ""
 	pub.sendMessage('Done')
+	self.t2=time.time()
+	print "It took %4.2f seconds to deal with %i images (i.e %4.2f images per second)" %((self.t2-self.t1),len(self.IO.fname_list),float(len(self.IO.fname_list)/(self.t2-self.t1)))
 	
     def SaveStatsEnd(self):	
 	stat=open('stats.dat','a')
@@ -814,31 +833,38 @@ if __name__ == '__main__':
 	
 	(options,args)=HitFinderParser.parse_args(argv)
         
-	
+	t1=time.time()
 	IO=IO()
 	X=XSetup()
 	HF=HFParams()
 	presenter()
 	start=10770
-        for i in range(0,1):
-          num=start+i*10
-	  IO.datadir='/Users/Nico/prog/NPC/img'#os.getcwd()
-	  os.chdir(IO.datadir)
-          IO.procdir='/Users/Nico/prog/NPC'
-	  IO.root=os.path.join('mem3_fre_')
-          IO.bkg=[0]
-   	  num_files=len(glob.glob('*.edf'))
-          #if num_files == 1681:
-          print "============================================\n" 
-   	  print "Now Hit Finding in %s" %IO.datadir
-	  main(IO,XSetup,HFParams,True)
-	  print "Finished  Hit Finding in %s\n" %IO.datadir
-	  print "============================================\n" 
-	  #else  :
-          #  print "Scan not finished... Waiting up"
-          #  time.sleep(60)
-        
-		
+        #for i in range(0,1):
+        #num=start+i*10
+	IO.datadir='/Volumes/verlaine/LYS_ID13/BEFORE_LS2253/edf_sorted/edf/'#os.getcwd()
+	os.chdir(IO.datadir)
+        IO.procdir='/Users/Nico'
+	IO.root='lys2_3'
+	XSetup.wavelength=0.954
+	#Lys2
+	XSetup.beam_x=545
+	XSetup.beam_y=504
+	#Mount5
+	#XSetup.beam_x=518
+	#XSetup.beam_y=504
+	XSetup.distance=106.37
+        HFParams.threshold=50
+	HFParams.npixels=20
+	HFParams.DoPeakSearch=True
+	print "============================================\n" 
+   	print "Now Hit Finding in %s" %IO.datadir
+	main(IO,XSetup,HFParams,True)
+	print "Finished  Hit Finding in %s\n" %IO.datadir
+	print "============================================\n" 
+	#else  :
+        #  print "Scan not finished... Waiting up"
+        #  time.sleep(60)
+	t2=time.time()
 	
     
 
